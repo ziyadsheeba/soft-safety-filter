@@ -46,10 +46,10 @@ class LinearMPC:
         self.f_u   = f_u
         self.alpha = alpha
         self.N     = N
-        #self.opti_slack  = casadi.Opti()
-        #self.opti_perf   = casadi.Opti() 
-        self.opti_slack  = casadi.Opti('conic')
-        self.opti_perf   = casadi.Opti('conic') 
+        self.opti_slack  = casadi.Opti()
+        self.opti_perf   = casadi.Opti() 
+        #self.opti_slack  = casadi.Opti('conic')
+        #self.opti_perf   = casadi.Opti('conic') 
  
         # solver variable/parameter pointers for slack 
         self.x0      = None
@@ -110,7 +110,7 @@ class LinearMPC:
         '''
             choose solver
         '''
-        '''
+        
         p_opts = {}
         s_opts = {"print_level" : 0,
                   "print_user_options": "no",
@@ -125,7 +125,7 @@ class LinearMPC:
         s_opts = {"OutputFlag": 1}
         self.opti_slack.solver("gurobi", p_opts, s_opts)
         self.opti_perf.solver("gurobi", p_opts,  s_opts)
-
+        '''
         '''
             cost function for the slack variables: opti_slack
         '''
@@ -237,7 +237,7 @@ class LinearMPC:
 
         # formulation as a quadratic constraint
         
-        ''' 
+         
         for i in range(self.f_x.shape[0]):
             c[i] = np.linalg.norm(P_bar@(self.G_x[i,:].T))
             c_squ[i] = self.G_x[i,:]@P_inv@self.G_x[i,:].T
@@ -251,7 +251,7 @@ class LinearMPC:
         
         
         self.c = c
-        '''
+        
         # formulation as it is
         #self.opti_slack.subject_to(c*casadi.sqrt(x[-x_dim:].T @self.P @ x[-x_dim:] + 1e-16) - eps_s <= self.f_x)
         #self.opti_perf.subject_to(c*casadi.sqrt(x_p[-x_dim:].T @self.P @ x_p[-x_dim:] + 1e-16) - eps_s_p <= self.f_x)
@@ -279,5 +279,5 @@ class LinearMPC:
 
         u_dim = self.B.shape[1]
         u0    = sol.value(self.u_p)[:u_dim].reshape((u_dim,1))
-        traj  = sol.value(self.x_p).reshape((self.N,self.A.shape[0])) 
+        traj  = sol.value(self.x_p).reshape((self.N, self.A.shape[0]))
         return u0, traj 

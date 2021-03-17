@@ -61,7 +61,7 @@ def main():
     '''
     visualize_constraints = True
     sim_steps             = 1000
-    N                     = 30
+    N                     = 20
     
     #constraints
 
@@ -70,14 +70,14 @@ def main():
     x_min_vel             = -1
     x_max_vel             = 1
     
-    u_min                 = -1
-    u_max                 =  1
+    u_min                 = -0.5
+    u_max                 =  0.5
     
     n_x_const             = 4
     n_u_const             = 2
      
     #initial condition
-    x0                    = np.array([-1,0.6]).reshape(2,1)
+    x0                    = np.array([-1,-1]).reshape(2,1)
     
     # system parameters
     k                     = 1       
@@ -86,10 +86,10 @@ def main():
     
     
     # stage cost matrices
-    Q = np.array([[1, 0], [0, 1]]) #state quadratic weights        
-    R = 10                         #input quadratic weights  
-    S     = np.eye(n_x_const)      #slack quadratic weights
-    gamma = 1                      #slack linear weight
+    Q = np.array([[1, 0], [0, 1]])  #state quadratic weights        
+    R = 10                          #input quadratic weights  
+    S     = np.eye(n_x_const)       #slack quadratic weights
+    gamma = 100                     #slack linear weight
 
     
     '''
@@ -289,7 +289,7 @@ def main():
         elp.set_ydata(elp2)
         tra.set_xdata(traj1)
         tra.set_ydata(traj2)
-        plt.pause(0.5)
+        plt.pause(0.1)
 
 
 if __name__ == "__main__":
