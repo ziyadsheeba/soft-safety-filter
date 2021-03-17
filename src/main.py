@@ -87,7 +87,7 @@ def main():
     Q = np.array([[1, 0], [0, 1]]) #state quadratic weights        
     R = 10                         #input quadratic weights  
     S     = np.eye(f_x.shape[0])   #slack quadratic weights
-    gamma = 1
+    gamma = 1                      #slack linear weight
 
     
     '''
