@@ -62,18 +62,34 @@ def main():
     visualize_constraints = True
     sim_steps             = 1000
     N                     = 30
+    
+    #constraints
+
     x_min_pos             = -1
     x_max_pos             = 1
     x_min_vel             = -1
     x_max_vel             = 1
+    
     u_min                 = -0.2
     u_max                 =  0.2
+    
+     
+    #initial condition
     x0                    = np.array([-2,-2]).reshape(2,1)
-    k                     = 1       # spring constant
-    c                     = 1       # damper constant
-    m                     = 0.5     # mass
+    
+    # system parameters
+    k                     = 1       
+    c                     = 1       
+    m                     = 0.5
+    
+    
+    # stage cost matrices
+    Q = np.array([[1, 0], [0, 1]]) #state quadratic weights        
+    R = 10                         #input quadratic weights  
+    S     = np.eye(f_x.shape[0])   #slack quadratic weights
+    gamma = 1
 
-
+    
     '''
         Define the matrices 
     '''
@@ -124,9 +140,8 @@ def main():
         Define the MPC stage/terminal cost weights
     '''
     
-    Q = np.array([[1, 0], [0, 1]])     # state weight penalty
-    R = 10                                # input weight penalty                     
-    P = solve_discrete_are(A, B, Q, R)   # infinite LQR weight penalty
+                    
+    P = solve_discrete_are(A, B, Q, R)    # infinite LQR weight penalty
     '''
         Define the LQR state feedback matrix
     '''
@@ -216,9 +231,7 @@ def main():
     ''' 
         Define the slack linear and quadratic stage costs
     '''
-    S     = np.eye(f_x.shape[0])
-    gamma = 1
-
+    
     assert S.shape[0] == f_x.shape[0]
     
     '''
