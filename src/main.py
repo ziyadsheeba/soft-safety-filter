@@ -70,23 +70,25 @@ def main():
     x_min_vel             = -1
     x_max_vel             = 1
     
-    u_min                 = -0.2
-    u_max                 =  0.2
+    u_min                 = -1
+    u_max                 =  1
     
+    n_x_const             = 4
+    n_u_const             = 2
      
     #initial condition
-    x0                    = np.array([-2,-2]).reshape(2,1)
+    x0                    = np.array([-1,0.6]).reshape(2,1)
     
     # system parameters
     k                     = 1       
-    c                     = 1       
+    c                     = 0.1       
     m                     = 0.5
     
     
     # stage cost matrices
     Q = np.array([[1, 0], [0, 1]]) #state quadratic weights        
     R = 10                         #input quadratic weights  
-    S     = np.eye(f_x.shape[0])   #slack quadratic weights
+    S     = np.eye(n_x_const)      #slack quadratic weights
     gamma = 1                      #slack linear weight
 
     
@@ -137,7 +139,7 @@ def main():
     print("system stable: ", str(stable))
 
     '''
-        Define the MPC stage/terminal cost weights
+        Solve DARE 
     '''
     
                     
@@ -217,8 +219,7 @@ def main():
     
     if (visualize_constraints):    
         # defining the state  polytopic constraints
-        p = pc.Polytope(np.concatenate([G_x, G_x_u], axis = 0),
-                        np.concatenate([f_x, f_x_u], axis = 0))
+        p = pc.Polytope(G_x, f_x)
         # plotting
         p.plot(color = 'pink')
         plt.plot(ellipse[0,:], ellipse[1,:])
@@ -227,13 +228,7 @@ def main():
         plt.ylabel('x2 (velocity)')
         plt.show()
 
-
-    ''' 
-        Define the slack linear and quadratic stage costs
-    '''
-    
-    assert S.shape[0] == f_x.shape[0]
-    
+ 
     '''
         Instantiate the LinearMPC model
     '''
@@ -245,6 +240,7 @@ def main():
     '''
 
     x_current = x0
+    
     # state buffer
     x_hist1 = [x_current[0,0]]
     x_hist2 = [x_current[1,0]]

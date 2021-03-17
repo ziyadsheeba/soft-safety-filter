@@ -204,7 +204,6 @@ class LinearMPC:
             input constraints 
         '''
         for i in range(0,N-1):
-            a = 0
             self.opti_slack.subject_to(self.G_u@u[i*u_dim:(i+1)*u_dim] <= self.f_u) 
             self.opti_perf.subject_to(self.G_u@u_p[i*u_dim:(i+1)*u_dim] <= self.f_u) 
 
@@ -212,7 +211,7 @@ class LinearMPC:
             terminal constraint
         '''
         
-        #self.opti_slack.subject_to(x[-x_dim:].T@self.P@x[-x_dim:] <= self.alpha)
+        self.opti_slack.subject_to(x[-x_dim:].T@self.P@x[-x_dim:] <= self.alpha)
         self.opti_perf.subject_to(x_p[-x_dim:].T@self.P@x_p[-x_dim:] <= self.alpha)
  
         '''
@@ -238,7 +237,7 @@ class LinearMPC:
 
         # formulation as a quadratic constraint
         
-        
+        ''' 
         for i in range(self.f_x.shape[0]):
             c[i] = np.linalg.norm(P_bar@(self.G_x[i,:].T))
             c_squ[i] = self.G_x[i,:]@P_inv@self.G_x[i,:].T
@@ -252,7 +251,7 @@ class LinearMPC:
         
         
         self.c = c
-        
+        '''
         # formulation as it is
         #self.opti_slack.subject_to(c*casadi.sqrt(x[-x_dim:].T @self.P @ x[-x_dim:] + 1e-16) - eps_s <= self.f_x)
         #self.opti_perf.subject_to(c*casadi.sqrt(x_p[-x_dim:].T @self.P @ x_p[-x_dim:] + 1e-16) - eps_s_p <= self.f_x)
@@ -264,13 +263,9 @@ class LinearMPC:
         # solve slack problem
         self.opti_slack.set_value(self.x0, x0)
         sol = self.opti_slack.solve()
-        #ipdb.set_trace()
+        
         # test constraint value for terminal slack definition
         x = sol.value(self.x)
-        val = self.c*np.sqrt(x[-2:].T@self.P@x[-2:] + 1e-16)
-        print("constraint violation: ",  val - self.f_x)
-        print("eps_s: ", sol.value(self.eps_s))
-        ipdb.set_trace()
          
         # warm start perf problem
         self.opti_perf.set_initial(self.x_p, sol.value(self.x))
