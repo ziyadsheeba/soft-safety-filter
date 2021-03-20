@@ -14,7 +14,7 @@ import ipdb
 
 
 class LinearMPC:
-    def __init__(self, A, B, Q, R, P, S, gamma ,G_x, f_x, G_u, f_u, alpha, N = 20):
+    def __init__(self, A, B, Q, R, P, S, gamma ,G_x, f_x, G_u, f_u, alpha, dynamics, N = 20):
         '''
             A           : dynamics matrix
             B           : inputs matrix
@@ -64,7 +64,9 @@ class LinearMPC:
        
         # check if slack variables are zero
         self.zero_slack = False
-
+        
+        # define a dynamics callback 
+        self.dynamics = dynamics
     def setup(self):
 
         ''' 
@@ -139,6 +141,7 @@ class LinearMPC:
                                  eps_s.T@self.S@eps_s + 
                                  self.gamma*ones_s@eps_s)
         
+        
         # performance
         Q_telda = np.kron(np.eye(N), self.Q)
         R_telda = np.kron(np.eye(N-1), self.R)
@@ -153,12 +156,20 @@ class LinearMPC:
         self.opti_slack.subject_to(x[0:x_dim]  == x0)
         self.opti_perf.subject_to(x_p[0:x_dim] == x0_p)
         for i in range(1,N):
+
+            self.opti_slack.subject_to(x[i*x_dim:(i+1)*x_dim] == self.dynamics(x[(i-1)*x_dim:i*x_dim],
+                                                                               u[(i-1)*u_dim:i*u_dim]))
+           
+            self.opti_perf.subject_to(x_p[i*x_dim:(i+1)*x_dim] == self.dynamics(x_p[(i-1)*x_dim:i*x_dim],
+                                                                               u_p[(i-1)*u_dim:i*u_dim]))
+        '''
+        for i in range(1,N):
             self.opti_slack.subject_to(x[i*x_dim:(i+1)*x_dim] == self.A@x[(i-1)*x_dim:i*x_dim] + 
                                                                  self.B@u[(i-1)*u_dim:i*u_dim])
             
             self.opti_perf.subject_to(x_p[i*x_dim:(i+1)*x_dim] == self.A@x_p[(i-1)*x_dim:i*x_dim] + 
                                                                   self.B@u_p[(i-1)*u_dim:i*u_dim])
-  
+        '''
         '''
             state constraints with the slack variables
         '''
