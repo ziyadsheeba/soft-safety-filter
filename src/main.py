@@ -77,7 +77,7 @@ def main():
     n_u_const             = 2
      
     #initial condition
-    x0                    = np.array([-2,-2]).reshape(2,1)
+    x0                    = np.array([-1.1,-1.1]).reshape(2,1)
     
     # system parameters
     k                     = 1       

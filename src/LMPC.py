@@ -48,8 +48,6 @@ class LinearMPC:
         self.N     = N
         self.opti_slack  = casadi.Opti()
         self.opti_perf   = casadi.Opti() 
-        #self.opti_slack  = casadi.Opti('conic')
-        #self.opti_perf   = casadi.Opti('conic') 
  
         # solver variable/parameter pointers for slack 
         self.x0      = None
@@ -57,13 +55,15 @@ class LinearMPC:
         self.eps_s   = None
         self.u       = None
         self.x       = None
-        self.c       = None #remove
+        
         # solver variable/parameter pointers for slack 
         self.u_p     = None
         self.x_p     = None
         self.eps_i_p = None
         self.eps_s_p = None
-        
+       
+        # check if slack variables are zero
+        self.zero_slack = False
 
     def setup(self):
 
@@ -120,15 +120,11 @@ class LinearMPC:
          
         self.opti_slack.solver("ipopt", p_opts, s_opts)
         self.opti_perf.solver("ipopt", p_opts, s_opts)
-        '''
-        p_opts = {}
-        s_opts = {"OutputFlag": 1}
-        self.opti_slack.solver("gurobi", p_opts, s_opts)
-        self.opti_perf.solver("gurobi", p_opts,  s_opts)
-        '''
+        
         '''
             cost function for the slack variables: opti_slack
         '''
+        
         # slack
         S_telda   = np.kron(np.eye(N-1), self.S)
         I_rep     = np.kron(np.ones([N-1,1]), np.eye(eps_s.shape[0]))
@@ -153,22 +149,7 @@ class LinearMPC:
         '''
             dynamics constraint without substitution
         '''
-        '''
-        I = np.kron(np.eye(N), np.eye(x_dim))   
-        A_telda = np.concatenate([np.kron(np.eye(N-1), -self.A), np.zeros([(N-1)*x_dim, x_dim])], axis = 1) 
-        A_telda = np.concatenate([np.zeros([x_dim, N*x_dim]), A_telda], axis = 0) + I
         
-        B_telda = np.kron(np.eye(N-1), self.B)
-        B_telda = np.concatenate([np.zeros([x_dim, u_dim*(N-1)]), B_telda], axis = 0) 
-        
-        b_telda    = np.zeros([N,1])
-        b_telda[0,0] = 1
-        b_telda = np.kron(b_telda, self.A)
-        
-        self.opti_slack.subject_to(A_telda@x == B_telda@u + b_telda@x0)
-        self.opti_perf.subject_to(A_telda@x_p == B_telda@u_p + b_telda@x0_p)
-        
-        '''
         self.opti_slack.subject_to(x[0:x_dim]  == x0)
         self.opti_perf.subject_to(x_p[0:x_dim] == x0_p)
         for i in range(1,N):
@@ -180,15 +161,6 @@ class LinearMPC:
   
         '''
             state constraints with the slack variables
-        '''
-         
-        '''
-        G_x_telda = np.kron(np.eye(N-1), self.G_x)
-        f_x_telda = np.kron(np.ones([N-1,1]), self.f_x)
-        I_rep     = np.kron(np.ones([N-1,1]), np.eye(eps_s.shape[0]))
-        self.opti_slack.subject_to(G_x_telda@x[:-x_dim] <= f_x_telda + eps_i + I_rep@eps_s)
-        self.opti_perf.subject_to(G_x_telda@x_p[:-x_dim] <= f_x_telda + eps_i_p + I_rep@eps_s_p)
-        
         '''
         
         for i in range(0,N-1):
@@ -247,15 +219,7 @@ class LinearMPC:
  
             self.opti_perf.subject_to(c_squ[i]*(x_p[-x_dim:].T@self.P@x_p[-x_dim:]) <= self.f_x[i]**2 + 
                                                                                         eps_s_p[i]*eps_s_p[i] + 
-                                                                                        2*self.f_x[i]*eps_s_p[i])
-        
-        
-        self.c = c
-        
-        # formulation as it is
-        #self.opti_slack.subject_to(c*casadi.sqrt(x[-x_dim:].T @self.P @ x[-x_dim:] + 1e-16) - eps_s <= self.f_x)
-        #self.opti_perf.subject_to(c*casadi.sqrt(x_p[-x_dim:].T @self.P @ x_p[-x_dim:] + 1e-16) - eps_s_p <= self.f_x)
-        
+                                                                                        2*self.f_x[i]*eps_s_p[i]) 
         pass
 
     def solve(self, x0):
@@ -263,10 +227,10 @@ class LinearMPC:
         # solve slack problem
         self.opti_slack.set_value(self.x0, x0)
         sol = self.opti_slack.solve()
-        
-        # test constraint value for terminal slack definition
-        x = sol.value(self.x)
          
+        # check slack variables
+        self.check_hard_feasibility(sol)
+
         # warm start perf problem
         self.opti_perf.set_initial(self.x_p, sol.value(self.x))
         self.opti_perf.set_initial(self.u_p, sol.value(self.u))
@@ -280,4 +244,31 @@ class LinearMPC:
         u_dim = self.B.shape[1]
         u0    = sol.value(self.u_p)[:u_dim].reshape((u_dim,1))
         traj  = sol.value(self.x_p).reshape((self.N, self.A.shape[0]))
-        return u0, traj 
+        return u0, traj
+
+    def check_hard_feasibility(self, sol):
+        '''
+            Checks if the slack variables are non-zero.
+            This is relavant when integrating this scheme with the safety filter.
+            As soon as the optimal slack variables are zero, this controller will 
+            be disabled and the (learning controller + safety filter) will be 
+            enabled
+        '''
+
+        norm = np.linalg.norm(np.concatenate([sol.value(self.eps_i), sol.value(self.eps_s)], axis = 0))
+        print(norm) 
+        if norm < 1e-7:
+
+            self.zero_slack = True
+            print("safety filter can be enabled")
+            print(" ") 
+            print(" ") 
+            print(" ") 
+            print(" ") 
+            print(" ") 
+            print(" ") 
+            print(" ") 
+            print(" ") 
+        pass
+
+
