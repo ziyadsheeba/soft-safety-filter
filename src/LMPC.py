@@ -116,7 +116,7 @@ class LinearMPC:
                   "print_user_options": "no",
                   "print_options_documentation": "no",
                   "print_frequency_iter": 10000,
-                  "max_iter" : 10000}
+                  "max_iter" : 100000}
          
         self.opti_slack.solver("ipopt", p_opts, s_opts)
         self.opti_perf.solver("ipopt", p_opts, s_opts)

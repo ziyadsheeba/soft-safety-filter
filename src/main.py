@@ -40,7 +40,7 @@ def simulate_dynamics(A,B,x0, u=0, steps = 10000, plot = True):
         u = np.zeros((B.shape[1], 1))
 
     for i in range(steps):
-        x_next = A@x_current  
+        x_next = A@x_current + B@u 
         x_current = x_next
 
         if (plot):
@@ -70,14 +70,14 @@ def main():
     x_min_vel             = -1
     x_max_vel             = 1
     
-    u_min                 = -0.5
-    u_max                 =  0.5
+    u_min                 = -1
+    u_max                 =  1
     
     n_x_const             = 4
     n_u_const             = 2
      
     #initial condition
-    x0                    = np.array([-1,-1]).reshape(2,1)
+    x0                    = np.array([-2,-2]).reshape(2,1)
     
     # system parameters
     k                     = 1       
@@ -86,10 +86,10 @@ def main():
     
     
     # stage cost matrices
-    Q = np.array([[1, 0], [0, 1]])  #state quadratic weights        
-    R = 10                          #input quadratic weights  
-    S     = np.eye(n_x_const)       #slack quadratic weights
-    gamma = 100                     #slack linear weight
+    Q = 1*np.array([[1, 0], [0, 1]])   #state quadratic weights        
+    R = 10                             #input quadratic weights  
+    S     = np.eye(n_x_const)          #slack quadratic weights
+    gamma = 100                        #slack linear weight
 
     
     '''
@@ -223,9 +223,11 @@ def main():
         # plotting
         p.plot(color = 'pink')
         plt.plot(ellipse[0,:], ellipse[1,:])
+        plt.plot(x0[0], x0[1], 'go')
         plt.title('Constriants')
         plt.xlabel('x1 (position)')
         plt.ylabel('x2 (velocity)')
+        plt.legend(['terminal set','initial condition','state constriants'])
         plt.show()
 
  
@@ -251,8 +253,8 @@ def main():
     elp2 = ellipse[1,:].tolist() 
     
     # plotting planned trajectory
-    traj1 = []
-    traj2 = []
+    traj1 = [x0[0]]
+    traj2 = [x0[1]]
 
     # plotting options
     fig  = plt.figure()
@@ -273,24 +275,25 @@ def main():
     plt.show()
 
     for i in range(sim_steps):
-        u, traj = controller.solve(x_current)
-        x_next =  simulate_dynamics(A,B,x_current, u = u, steps = 1, plot = False)
-        x_current = x_next
-        
+        u0, traj = controller.solve(x_current)
+        x_next =  simulate_dynamics(A,B,x_current, u = u0, steps = 1, plot = False)
+                
         x_hist1.append(x_next[0,0])
         x_hist2.append(x_next[1,0])
         
         traj1 = traj[:,0].tolist()
         traj2 = traj[:,1].tolist()
 
-        dyn.set_xdata(x_hist1)
-        dyn.set_ydata(x_hist2)
-        elp.set_xdata(elp1)
-        elp.set_ydata(elp2)
         tra.set_xdata(traj1)
         tra.set_ydata(traj2)
+        dyn.set_xdata(x_hist1[:-1])
+        dyn.set_ydata(x_hist2[:-1])
+        elp.set_xdata(elp1)
+        elp.set_ydata(elp2)
+
         plt.pause(0.1)
 
+        x_current = x_next
 
 if __name__ == "__main__":
     main()
