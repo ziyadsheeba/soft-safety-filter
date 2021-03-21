@@ -13,10 +13,11 @@ import math
 import ipdb
 
 class SMPC:
-    def __init__(self,x_dim, u_dim,  Q, R, P, S, gamma ,G_x, f_x, G_u, f_u, alpha, dynamics, N = 20):
+    def __init__(self, Q, R, P, S, gamma ,G_x, f_x, G_u, f_u, alpha, dynamics, N = 20):
+        
         '''
             x_dim       : state dimension
-            u_dim       : input 
+            u_dim       : input dimension 
             Q           : states stage cost
             R           : input stage cost
             P           : terminal cost
@@ -46,23 +47,32 @@ class SMPC:
         self.opti_slack  = casadi.Opti()
         self.opti_perf   = casadi.Opti() 
         
-        # state and action dimensions
-        self.x_dim = x_dim
-        self.u_dim = u_dim
+        # state and action dimensions:
+        try:
+            self.x_dim = Q.shape[0]
+        except:
+            self.x_dim = 1
+        try:
+            self.u_dim = R.shape[0]
+        except:
+            self.u_dim = 1
 
-        # solver variable/parameter pointers for slack 
+        # solver variable/parameter pointers for slack optimization 
         self.x0      = None
         self.eps_i   = None        
         self.eps_s   = None
         self.u       = None
         self.x       = None
         
-        # solver variable/parameter pointers for slack 
+        # solver variable/parameter pointers for performance optimization
         self.u_p     = None
         self.x_p     = None
         self.eps_i_p = None
         self.eps_s_p = None
-       
+        
+        # solver tolerance
+        self.tol = 1e-8
+
         # check if slack variables are zero
         self.zero_slack = False
         
@@ -89,7 +99,8 @@ class SMPC:
         eps_i = self.opti_slack.variable((N-1)*eps_dim,1)   # N slacks along the horizon
         eps_s = self.opti_slack.variable(eps_dim,1)         # terminal slack
         
-
+        
+        # assign to instance variables for global access
         self.x0      = x0
         self.eps_i   = eps_i        
         self.eps_s   = eps_s
@@ -103,6 +114,7 @@ class SMPC:
         eps_i_p  = self.opti_perf.parameter((N-1)*eps_dim,1)  # N slacks along the horizon as a parameter
         eps_s_p  = self.opti_perf.parameter(eps_dim,1)        # terminal slack as a parameter
         
+        # assign to instance variables for global acess
         self.x0_p    = x0_p
         self.u_p     = u_p
         self.x_p     = x_p
@@ -116,11 +128,12 @@ class SMPC:
         '''
         
         p_opts = {}
-        s_opts = {"print_level" : 0,
-                  "print_user_options": "no",
-                  "print_options_documentation": "no",
-                  "print_frequency_iter": 10000,
-                  "max_iter" : 100000}
+        s_opts = {'print_level' : 0,
+                  'print_user_options': "no",
+                  'print_options_documentation': "no",
+                  'print_frequency_iter': 10000,
+                  'max_iter' : 100000,
+                  'tol'      : self.tol}
          
         self.opti_slack.solver("ipopt", p_opts, s_opts)
         self.opti_perf.solver("ipopt", p_opts, s_opts)
@@ -202,22 +215,19 @@ class SMPC:
             terminal slack scaling
         '''
 
-        P_sqrt = np.linalg.cholesky(self.P)
-        P_bar = np.linalg.inv(P_sqrt)
         P_inv  = np.linalg.inv(self.P)
-        c     = np.ones([self.f_x.shape[0], 1])
-        c_squ = np.ones([self.f_x.shape[0], 1])
+        c_squared = np.ones([self.f_x.shape[0], 1])
         
 
         # formulation as a quadratic constraint  
         for i in range(self.f_x.shape[0]):
-            c[i] = np.linalg.norm(P_bar@(self.G_x[i,:].T))
-            c_squ[i] = self.G_x[i,:]@P_inv@self.G_x[i,:].T
-            self.opti_slack.subject_to(c_squ[i]*(x[-x_dim:].T@self.P@x[-x_dim:]) <= self.f_x[i]**2 + 
+            
+            c_squared[i] = self.G_x[i,:]@P_inv@self.G_x[i,:].T
+            self.opti_slack.subject_to(c_squared[i]*(x[-x_dim:].T@self.P@x[-x_dim:]) <= self.f_x[i]**2 + 
                                                                                     eps_s[i]*eps_s[i] + 
                                                                                     2*self.f_x[i]*eps_s[i])
  
-            self.opti_perf.subject_to(c_squ[i]*(x_p[-x_dim:].T@self.P@x_p[-x_dim:]) <= self.f_x[i]**2 + 
+            self.opti_perf.subject_to(c_squared[i]*(x_p[-x_dim:].T@self.P@x_p[-x_dim:]) <= self.f_x[i]**2 + 
                                                                                        eps_s_p[i]*eps_s_p[i] + 
                                                                                        2*self.f_x[i]*eps_s_p[i]) 
         pass
@@ -235,16 +245,23 @@ class SMPC:
         self.opti_perf.set_initial(self.x_p, sol.value(self.x))
         self.opti_perf.set_initial(self.u_p, sol.value(self.u))
         
-        # solve the perf problem
+        # initialize the parameters of the performance optimization
         self.opti_perf.set_value(self.x0_p, x0)
         self.opti_perf.set_value(self.eps_s_p, sol.value(self.eps_s))
         self.opti_perf.set_value(self.eps_i_p, sol.value(self.eps_i))
+        
+        # solve the performance optimization
         sol = self.opti_perf.solve()
 
+        
+        # return the control input along with the planned trajectory
         u_dim = self.u_dim
         x_dim = self.x_dim
         u0    = sol.value(self.u_p)[:u_dim].reshape((u_dim,1))
         traj  = sol.value(self.x_p).reshape((self.N, x_dim))
+        #print("current state: ", [traj[0,0], traj[0,1]])
+        #print("terminal state: ", [traj[-1,0], traj[-1,1]])
+        #print("terminal slack: ", sol.value(self.eps_s_p))
         return u0, traj
 
     def check_hard_feasibility(self, sol):
@@ -257,8 +274,8 @@ class SMPC:
         '''
 
         norm = np.linalg.norm(np.concatenate([sol.value(self.eps_i), sol.value(self.eps_s)], axis = 0))
-        print(norm) 
-        if norm < 1e-7:
+        print("slack norm ", norm)
+        if norm < self.tol:
 
             self.zero_slack = True
             print("safety filter can be enabled")
