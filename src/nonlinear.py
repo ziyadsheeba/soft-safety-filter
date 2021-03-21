@@ -12,12 +12,12 @@ import ipdb
 
 def simulate_dynamics(dynamics, x0, u, steps = 10000, plot = True):
     '''
-        Assumes a 2D state space
+        Assumes a 2D state space for plotting
     '''
     x_current = x0 
        
     if (plot):
-        
+        assert x0.shape[0] == 2 and x0.shape[1] == 1 
         # state buffer
         x_hist1 = [x0[0,0]]
         x_hist2 = [x0[1,0]]
@@ -140,6 +140,7 @@ def main():
     
                     
     P = solve_discrete_are(A, B, Q, R)    # infinite LQR weight penalty
+    
     '''
         Define the LQR state feedback matrix
     '''

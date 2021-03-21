@@ -60,7 +60,7 @@ def main():
     '''
     visualize_constraints = True
     sim_steps             = 1000
-    N                     = 20
+    N                     = 40
     
     #constraints
 
@@ -76,7 +76,7 @@ def main():
     n_u_const             = 2
      
     #initial condition
-    x0                    = np.array([-1.1,-1.1]).reshape(2,1)
+    x0                    = np.array([-2,-2.5]).reshape(2,1)
     
     # system parameters
     k                     = 1       
@@ -228,8 +228,7 @@ def main():
     '''
         Instantiate the soft MPC model
     '''
-    controller = SMPC(x_dim, u_dim,
-                      Q,R,P,S,gamma,
+    controller = SMPC(Q,R,P,S,gamma,
                       G_x,f_x,G_u,f_u,
                     alpha_opt,dynamics, N)
     controller.setup()
