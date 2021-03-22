@@ -48,6 +48,22 @@ def simulate_dynamics(dynamics, x0, u, steps = 10000, plot = True):
 
     return x_current   
 
+def exact_discretization(A_c, B_c, T):
+    A = expm(T*A_c)
+    B  = np.linalg.solve(A_c, (A - np.eye(A.shape[0]))@B_c)
+    return A, B
+
+def isstable(A):
+    eig_vals = eig(A)[0]
+    stable   = True
+    for eig_val in eig_vals:
+        if (np.iscomplex(eig_val)):
+            if (np.absolute(eig_val) >= 1):
+                stable = False
+        elif(np.abs(eig_val)>=0.99999):
+            stable = False
+    return stable
+
 def dynamics_callback(A,B):
     def dynamics(x,u):
         return A@x + B@u
@@ -108,12 +124,8 @@ def main():
     freq = 50           # sampling frequecy in Hz
     T    = 1/freq       # sampling time
     
-    A = expm(T*A_c)
-    B  = np.linalg.solve(A_c, (A - np.eye(A.shape[0]))@B_c)
-
-    assert A.shape[0] == 2 and A.shape[1] == 2
-    assert B.shape[0] == 2 and B.shape[1] == 1
-    
+    A, B = exact_discretization(A_c, B_c, T)
+        
     '''
         Define dynamics as a closure nested function to pass to the controller object
     '''
@@ -129,15 +141,7 @@ def main():
     '''
         Check if the system is inherently stable
     '''
-
-    eig_vals = eig(A)[0]
-    stable   = True
-    for eig_val in eig_vals:
-        if (np.iscomplex(eig_val)):
-            if (np.absolute(eig_val) >= 1):
-                stable = False
-        elif(np.abs(eig_val)>=0.99999):
-            stable = False
+    stable = isstable(A) 
     print("system stable: ", str(stable))
       
     '''
