@@ -55,7 +55,7 @@ def simulate_dynamics(dynamics, x0, u, steps = 10000, plot = True):
 
     return x_current   
 
-def dynamics_callback(T, m, c, k1, k2, mode = 'sim'):
+def dynamics_wrapper(T, m, c, k1, k2, mode = 'sim'):
     
     if mode == 'sim':
 
@@ -67,7 +67,7 @@ def dynamics_callback(T, m, c, k1, k2, mode = 'sim'):
                 a = -(k/m)*x² - (c/m)*v
             '''         
             x1_next = x[0] + T*x[1]
-            x2_next = x[1] + T*(-(k1/m)*x[0] + (-k2/m)*(x[0]**2) + (-c/m)*x[1] +(1/m)*u[0][0])
+            x2_next = x[1] + T*(-(k1/m)*x[0] + (-k2/m)*(x[0]**3) + (-c/m)*x[1] +(1/m)*u[0][0])
 
             return np.array([x1_next, x2_next]).reshape(2,1)
     elif mode == 'opt':
@@ -79,12 +79,24 @@ def dynamics_callback(T, m, c, k1, k2, mode = 'sim'):
                 a = -(k/m)*x² - (c/m)*v
             '''         
             x1_next = x[0] + T*x[1]
-            x2_next = x[1] + T*(-(k1/m)*x[0] + (-k2/m)*(x[0]**2) + (-c/m)*x[1] +(1/m)*u[0][0])
+            x2_next = x[1] + T*(-(k1/m)*x[0] + (-k2/m)*(x[0]**3) + (-c/m)*x[1] +(1/m)*u[0][0])
 
             return casadi.vertcat(x1_next, x2_next)
     return dynamics
 
-def phi_callback(dynamics, A, B, K):
+def ellipse_contoure(P, alpha):
+
+    '''
+       returns the ellpise contoure defined by the matrix P and the levelset alpha 
+    '''
+    res = 1000
+    L = np.linalg.cholesky(P/alpha)
+    t = np.linspace(0, 2*np.pi,res)
+    z = np.concatenate([np.cos(t).reshape((1,res)), np.sin(t).reshape((1,res))], axis = 0)
+    ellipse = np.linalg.solve(L,z)
+    return ellipse
+
+def phi_wrapper(dynamics, A, B, K):
     
     def phi(x):
         A_k = A + B@K
@@ -114,12 +126,12 @@ def main():
     n_u_const             = 2
      
     #initial condition
-    x0                    = np.array([-9,10]).reshape(2,1)
+    x0                    = np.array([-1,1]).reshape(2,1)
     
     # system parameters
-    k1                    = 1       
-    k2                    = 0.1
-    c                     = 1       
+    k1                    = 1     # linear spring factor      
+    k2                    = 0   # cubic spring factor
+    c                     = 0.1       
     m                     = 0.5
     
     
@@ -129,7 +141,7 @@ def main():
     # stage cost matrices
     Q = 1*np.array([[1, 0], [0, 1]])        #state quadratic weights        
     R = np.array([10]).reshape(u_dim,u_dim) #input quadratic weights  
-    S     = np.eye(n_x_const)               #slack quadratic weights
+    S     = 10*np.eye(n_x_const)               #slack quadratic weights
     gamma = 100                             #slack linear weight
    
     
@@ -137,17 +149,21 @@ def main():
         Define the dynamics
     '''
 
-    freq = 100           # sampling frequecy in Hz
+    freq = 200           # sampling frequecy in Hz
     T    = 1/freq       # sampling time
     
-    dynamics = dynamics_callback(T, m, c, k1, k2, mode = 'opt') 
-    dynamics_sim = dynamics_callback(T, m, c, k1, k2) 
-     
+    
+    # dynamics used for optimization must not include any numpy operations
+    dynamics = dynamics_wrapper(T, m, c, k1, k2, mode = 'opt') 
+    dynamics_sim = dynamics_wrapper(T, m, c, k1, k2) 
+    
+    # simulate the dynamics
+    #simulate_dynamics(dynamics_sim, x0 = x0, u = np.zeros([u_dim,1]),steps =  1000)
+
     '''
         choose an equilibrium point and define the linearized dynamics
+        equilibrium point chosen is [0,0]
     '''
-    x_equ = np.array([0,0]).reshape(x_dim,1)
-    u_equ = np.array([0]).reshape(u_dim,1)
     
     A = np.array([[1 , T], [-k1*T/m, (1-c*T/m)]])
     B = np.array([0, T/m]).reshape(x_dim, u_dim)
@@ -168,9 +184,12 @@ def main():
         find the eigen values of A + B@K and define c and P 
     '''
     A_k = A + B@K
-    eig_max = max(abs(eig(A_k)[0]))
-    c       = 1 - eig_max**2 - 0.0001  
-    P       = solve_discrete_lyapunov((1/sqrt(1-c))*A_k.T, Q + (K.T)@R@K) 
+    eig_vals = eig(A_k)[0]
+    eig_max  = max(abs(eig_vals))
+    c        = 1 - eig_max**2 - 0.01 
+    P       = solve_discrete_lyapunov((1/sqrt(1-c))*A_k, Q + (K.T)@R@K) 
+    
+    ipdb.set_trace()
     '''
         Define state and input constraint matrices
         -state constraints: 
@@ -221,14 +240,13 @@ def main():
    
 
     '''
-        solve for the optimal alpha, c1 and c2 according to the coverage control paper
-        algorithm 
+        solve for the optimal alpha, c1 and c2 according to the algorithm in the coverage control paper
     ''' 
-    phi = phi_callback(dynamics, A, B, K)
+    phi = phi_wrapper(dynamics, A, B, K)
     opti = casadi.Opti()
 
     p_opts = {}
-    s_opts = {'max_iter' : 100000}
+    s_opts = {'max_iter' : 10000}
     opti.solver('ipopt', p_opts, s_opts)
     
     x     = opti.variable(x_dim,1)
@@ -241,8 +259,8 @@ def main():
     opti.subject_to((phi(x).T)@P@phi(x) <= c1*x.T@P@x)
     opti.subject_to(x.T@A.T@P@phi(x) <= c2*x.T@P@x)
     opti.subject_to(x.T@P@x <= alpha)
-    opti.subject_to(alpha >= 0)
     opti.subject_to(alpha <= alpha_1)
+    
     try:
         sol = opti.solve()
         alpha_opt = sol.value(alpha)
@@ -250,25 +268,21 @@ def main():
     except:
         alpha_opt = 0
         print("optimal alpha not found. Terminal set set to zero")
-    
+        ipdb.set_trace() 
 
     '''
         visualize constraints and the ellipsoidal set
     '''
         
     # defining the ellipse coordinates
-    res = 100
-    L = np.linalg.cholesky(P/alpha_opt)
-    t = np.linspace(0, 2*np.pi,res)
-    z = np.concatenate([np.cos(t).reshape((1,res)), np.sin(t).reshape((1,res))], axis = 0)
-    ellipse = np.linalg.solve(L,z)
+    terminal_set = ellipse_contoure(P, alpha_opt)
     
     if (visualize_constraints):    
         # defining the state  polytopic constraints
-        p = pc.Polytope(G_x, f_x)
+        poly = pc.Polytope(G_x, f_x)
         # plotting
-        p.plot(color = 'pink')
-        plt.plot(ellipse[0,:], ellipse[1,:])
+        poly.plot(color = 'pink')
+        plt.plot(terminal_set[0,:], terminal_set[1,:])
         plt.plot(x0[0], x0[1], 'go')
         plt.title('Constriants')
         plt.xlabel('x1 (position)')
@@ -290,45 +304,57 @@ def main():
     '''
 
     x_current = x0
-    
+    terminal_set_scaled = terminal_set # the scaled terminal set for the terminal state
+
     # state buffer
     x_hist1 = [x_current[0,0]]
     x_hist2 = [x_current[1,0]]
 
-        
+
     # plotting terminal set
-    elp1 = ellipse[0,:].tolist() 
-    elp2 = ellipse[1,:].tolist() 
-    
+    elp1 = terminal_set[0,:].tolist()
+    elp2 = terminal_set[1,:].tolist()
+
+    # plotting the scaled terminal set
+    elp1_N = terminal_set_scaled[0,:].tolist()
+    elp2_N = terminal_set_scaled[1,:].tolist()
+
     # plotting planned trajectory
     traj1 = [x0[0]]
     traj2 = [x0[1]]
 
     # plotting options
-    fig  = plt.figure()
-    ax    = fig.add_subplot(111)
-    
-    dyn,  = ax.plot(x_hist1, x_hist2, '-o')
-    elp,  = ax.plot(elp1, elp2)
-    tra,  = ax.plot(traj1, traj2, '-o') 
-    
-    
+    poly.plot(color = 'pink')
+    dyn,  = plt.plot(x_hist1, x_hist2, '-o')
+    elp,  = plt.plot(elp1, elp2)
+    elp_N, = plt.plot(elp1_N, elp2_N)
+    tra,  = plt.plot(traj1, traj2, '-o')
+
+
     plt.title('System Dynamics')
     plt.xlabel('x1 (position)')
-    plt.ylabel('x2 (velocity)') 
-    ax.legend(['true trajectory', 'terminal set', 'planned trajectory'])
+    plt.ylabel('x2 (velocity)')
+
+    plt.legend(['true trajectory',
+                'terminal set',
+                'scaled terminal set',
+                'planned trajectory',
+                'state constraints'])
     plt.ion()
     plt.show()
-
     for i in range(sim_steps):
         u0, traj = controller.solve(x_current)
-        x_next =  simulate_dynamics(dynamics_sim,x_current, u = u0, steps = 1, plot = False)
-                
+        terminal_set_scaled = ellipse_contoure(P, controller.terminalset_scaled(traj[-x_dim,:]))
+        x_next =  simulate_dynamics(dynamics,x_current, u = u0, steps = 1, plot = False)
+
         x_hist1.append(x_next[0,0])
         x_hist2.append(x_next[1,0])
-        
+
         traj1 = traj[:,0].tolist()
         traj2 = traj[:,1].tolist()
+
+        elp1_N = terminal_set_scaled[0,:].tolist()
+        elp2_N = terminal_set_scaled[1,:].tolist()
 
         tra.set_xdata(traj1)
         tra.set_ydata(traj2)
@@ -336,10 +362,14 @@ def main():
         dyn.set_ydata(x_hist2[:-1])
         elp.set_xdata(elp1)
         elp.set_ydata(elp2)
-
-        plt.pause(0.1)
+        elp_N.set_xdata(elp1_N)
+        elp_N.set_ydata(elp2_N)
+        plt.pause(0.01)
 
         x_current = x_next
+  
+
+
 
 if __name__ == "__main__":
     main()
