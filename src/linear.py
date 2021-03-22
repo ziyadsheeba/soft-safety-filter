@@ -106,17 +106,19 @@ def main():
     S     = np.eye(n_x_const)          #slack quadratic weights
     gamma = 100                        #slack linear weight
    
+    x_dim = A_c.shape[1]
+    u_dim = B_c.shape[1]
+
+
     '''
         Define the matrices 
     '''
         
     A_c = np.array([[0,1], [-k/m, -c/m]])     # continous time dynamics matrix
     B_c = np.array([0,1/m], ndmin = 1)        # continous time input matrix
-    B_c = B_c.reshape((2,1))
+    B_c = B_c.reshape((x_dim,u_dim))
     
-    x_dim = A_c.shape[1]
-    u_dim = B_c.shape[1]
-
+    
     '''
         Apply exact discretization to the system.
     '''
