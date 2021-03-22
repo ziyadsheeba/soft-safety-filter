@@ -78,7 +78,7 @@ def ellipse_contoure(P, alpha):
 
 
 
-def dynamics_callback(A,B):
+def dynamics_wrapper(A,B):
     def dynamics(x,u):
         return A@x + B@u
     return dynamics
@@ -145,7 +145,7 @@ def main():
     '''
         Define dynamics as a closure nested function to pass to the controller object
     '''
-    dynamics = dynamics_callback(A,B) 
+    dynamics = dynamics_wrapper(A,B) 
     
     '''
         Simulate dynamics to check if it works as expected
@@ -248,7 +248,7 @@ def main():
     '''
     controller = SMPC(Q,R,P,S,gamma,
                       G_x,f_x,G_u,f_u,
-                    alpha_opt,dynamics, N)
+                      alpha_opt,dynamics, N)
     controller.setup()
     
     '''
