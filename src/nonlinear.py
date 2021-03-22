@@ -3,11 +3,17 @@
 '''
 import numpy as np
 from numpy.linalg import eig
+
 from scipy.linalg import expm
 from scipy.linalg import solve_discrete_are
+from scipy.linalg import solve_discrete_lyapunov
+
+
 from MPC import SMPC
+from math import sqrt
 import matplotlib.pyplot as plt
 import polytope as pc
+from casadi import *
 import ipdb
 
 def simulate_dynamics(dynamics, x0, u, steps = 10000, plot = True):
@@ -49,25 +55,41 @@ def simulate_dynamics(dynamics, x0, u, steps = 10000, plot = True):
 
     return x_current   
 
-def dynamics_callback(T, m, c, k1, k2):
-    def dynamics(x,u):
-        
-        '''
-            implement a discretized model using forward euler.
-            Incorporate a non-linear spring force to the system
-            a = -(k/m)*x² - (c/m)*v
-        '''        
-        
-        x1_current = x[0][0]
-        x2_current = x[1][0]
-        x1_next = x1_current + T*x2_current
-        x2_next = x2_current + T*(-(k1/m)*x1_current + (-k2/m)*(x1_current**2) + (-c/m)*x2_current +(1/m)*u[0][0])
-        
-        print(x1_next, "  ", x2_next)
-
-        return np.array([x1_next, x2_next]).reshape(2,1)
+def dynamics_callback(T, m, c, k1, k2, mode = 'sim'):
     
+    if mode == 'sim':
+
+        def dynamics(x,u):
+        
+            '''
+                implement a discretized model using forward euler.
+                Incorporate a non-linear spring force to the system
+                a = -(k/m)*x² - (c/m)*v
+            '''         
+            x1_next = x[0] + T*x[1]
+            x2_next = x[1] + T*(-(k1/m)*x[0] + (-k2/m)*(x[0]**2) + (-c/m)*x[1] +(1/m)*u[0][0])
+
+            return np.array([x1_next, x2_next]).reshape(2,1)
+    elif mode == 'opt':
+        def dynamics(x,u):
+        
+            '''
+                implement a discretized model using forward euler.
+                Incorporate a non-linear spring force to the system
+                a = -(k/m)*x² - (c/m)*v
+            '''         
+            x1_next = x[0] + T*x[1]
+            x2_next = x[1] + T*(-(k1/m)*x[0] + (-k2/m)*(x[0]**2) + (-c/m)*x[1] +(1/m)*u[0][0])
+
+            return casadi.vertcat(x1_next, x2_next)
     return dynamics
+
+def phi_callback(dynamics, A, B, K):
+    
+    def phi(x):
+        A_k = A + B@K
+        return A_k@x - dynamics(x,K@x) 
+    return phi
 
 def main():
     
@@ -92,7 +114,7 @@ def main():
     n_u_const             = 2
      
     #initial condition
-    x0                    = np.array([-1.1,0]).reshape(2,1)
+    x0                    = np.array([-9,10]).reshape(2,1)
     
     # system parameters
     k1                    = 1       
@@ -101,18 +123,16 @@ def main():
     m                     = 0.5
     
     
-    # stage cost matrices
-    Q = 1*np.array([[1, 0], [0, 1]])   #state quadratic weights        
-    R = 10                             #input quadratic weights  
-    S     = np.eye(n_x_const)          #slack quadratic weights
-    gamma = 100                        #slack linear weight
-   
-    '''
-        state/action dimensions
-    '''
     x_dim = 2   
     u_dim = 1
 
+    # stage cost matrices
+    Q = 1*np.array([[1, 0], [0, 1]])        #state quadratic weights        
+    R = np.array([10]).reshape(u_dim,u_dim) #input quadratic weights  
+    S     = np.eye(n_x_const)               #slack quadratic weights
+    gamma = 100                             #slack linear weight
+   
+    
     '''
         Define the dynamics
     '''
@@ -120,34 +140,37 @@ def main():
     freq = 100           # sampling frequecy in Hz
     T    = 1/freq       # sampling time
     
-    dynamics = dynamics_callback(T, m, c, k1, k2) 
+    dynamics = dynamics_callback(T, m, c, k1, k2, mode = 'opt') 
+    dynamics_sim = dynamics_callback(T, m, c, k1, k2) 
+     
+    '''
+        choose an equilibrium point and define the linearized dynamics
+    '''
+    x_equ = np.array([0,0]).reshape(x_dim,1)
+    u_equ = np.array([0]).reshape(u_dim,1)
     
-    '''
-        Simulate dynamics to check if it works as expected
-    '''
-
-    simulate_dynamics(dynamics, x0, u = np.zeros([u_dim,1]),steps = 2000)
-    
-    '''
-        Local analysis and choice of the linearization point goes here
+    A = np.array([[1 , T], [-k1*T/m, (1-c*T/m)]])
+    B = np.array([0, T/m]).reshape(x_dim, u_dim)
 
     '''
-
-        
-    '''
-        Solve DARE 
-    '''
-    
+        Solve DARE for the linearized dynamics 
+    ''' 
                     
-    P = solve_discrete_are(A, B, Q, R)    # infinite LQR weight penalty
+    P_lqr = solve_discrete_are(A, B, Q, R)    # infinite LQR weight penalty
     
     '''
-        Define the LQR state feedback matrix
+        Define the LQR state feedback matrix for the linearized dynamics
     '''
     
-    K = np.linalg.solve(R + B.T@P@B, -B.T@P@A)
-        
-
+    K = np.linalg.solve(R + B.T@P_lqr@B, -B.T@P_lqr@A)
+    
+    '''
+        find the eigen values of A + B@K and define c and P 
+    '''
+    A_k = A + B@K
+    eig_max = max(abs(eig(A_k)[0]))
+    c       = 1 - eig_max**2 - 0.0001  
+    P       = solve_discrete_lyapunov((1/sqrt(1-c))*A_k.T, Q + (K.T)@R@K) 
     '''
         Define state and input constraint matrices
         -state constraints: 
@@ -169,7 +192,7 @@ def main():
         - The ellipsoidal terminal set is a lyaponov level set of the system after
           applying the LQR feedback controller
 
-        - Need to ensure that theterminal controller satisfies the input constraints 
+        - Need to ensure that the terminal controller satisfies the input constraints 
           within the set
 
         - Solved in closed form using support functions. Check MPC lecture notes 
@@ -181,7 +204,7 @@ def main():
     G_x_u = G_u@K
     f_x_u = f_u
     
-    alpha_opt = 0
+    alpha_1 = 0
     N_const   = len(f_x_u) # number of constraints
     
     for i in range(N_const):
@@ -189,16 +212,50 @@ def main():
         alpha = (f_x_u[i]**2)/(F@np.linalg.inv(P)@F.T)
         alpha = alpha.flatten()[0]
         if i == 0:
-            alpha_opt = alpha
-        elif(alpha<alpha_opt):
-            alpha_opt = alpha
-    print("optimal level set: ", alpha_opt)
-    assert alpha_opt > 0
+            alpha_1 = alpha
+        elif(alpha<alpha_1):
+            alpha_1 = alpha
+    print("optimal level set: ", alpha_1)
+    assert alpha_1 > 0
+    
+   
+
+    '''
+        solve for the optimal alpha, c1 and c2 according to the coverage control paper
+        algorithm 
+    ''' 
+    phi = phi_callback(dynamics, A, B, K)
+    opti = casadi.Opti()
+
+    p_opts = {}
+    s_opts = {'max_iter' : 100000}
+    opti.solver('ipopt', p_opts, s_opts)
+    
+    x     = opti.variable(x_dim,1)
+    alpha = opti.variable()
+    c1    = opti.variable()
+    c2    = opti.variable()
+    
+    opti.minimize(-alpha)
+    opti.subject_to(c1 - 2*c2 == c)
+    opti.subject_to((phi(x).T)@P@phi(x) <= c1*x.T@P@x)
+    opti.subject_to(x.T@A.T@P@phi(x) <= c2*x.T@P@x)
+    opti.subject_to(x.T@P@x <= alpha)
+    opti.subject_to(alpha >= 0)
+    opti.subject_to(alpha <= alpha_1)
+    try:
+        sol = opti.solve()
+        alpha_opt = sol.value(alpha)
+        print("solved for optimal alpha: ", alpha_opt)
+    except:
+        alpha_opt = 0
+        print("optimal alpha not found. Terminal set set to zero")
+    
 
     '''
         visualize constraints and the ellipsoidal set
     '''
-   
+        
     # defining the ellipse coordinates
     res = 100
     L = np.linalg.cholesky(P/alpha_opt)
@@ -223,10 +280,9 @@ def main():
     '''
         Instantiate the soft MPC model
     '''
-    controller = SMPC(x_dim, u_dim,
-                      Q,R,P,S,gamma,
+    controller = SMPC(Q,R,P,S,gamma,
                       G_x,f_x,G_u,f_u,
-                    alpha_opt,dynamics, N)
+                      alpha_opt,dynamics, N)
     controller.setup()
     
     '''
@@ -266,7 +322,7 @@ def main():
 
     for i in range(sim_steps):
         u0, traj = controller.solve(x_current)
-        x_next =  simulate_dynamics(dynamics,x_current, u = u0, steps = 1, plot = False)
+        x_next =  simulate_dynamics(dynamics_sim,x_current, u = u0, steps = 1, plot = False)
                 
         x_hist1.append(x_next[0,0])
         x_hist2.append(x_next[1,0])
