@@ -64,6 +64,20 @@ def isstable(A):
             stable = False
     return stable
 
+def ellipse_contoure(P, alpha):
+    
+    '''
+       returns the ellpise contoure defined by the matrix P and the levelset alpha 
+    '''
+    res = 1000
+    L = np.linalg.cholesky(P/alpha)
+    t = np.linspace(0, 2*np.pi,res)
+    z = np.concatenate([np.cos(t).reshape((1,res)), np.sin(t).reshape((1,res))], axis = 0)
+    ellipse = np.linalg.solve(L,z)
+    return ellipse
+
+
+
 def dynamics_callback(A,B):
     def dynamics(x,u):
         return A@x + B@u
@@ -106,8 +120,8 @@ def main():
     S     = np.eye(n_x_const)          #slack quadratic weights
     gamma = 100                        #slack linear weight
    
-    x_dim = A_c.shape[1]
-    u_dim = B_c.shape[1]
+    x_dim = 2
+    u_dim = 1
 
 
     '''
@@ -210,19 +224,17 @@ def main():
         visualize constraints and the ellipsoidal set
     '''
    
-    # defining the ellipse coordinates
-    res = 100
-    L = np.linalg.cholesky(P/alpha_opt)
-    t = np.linspace(0, 2*np.pi,res)
-    z = np.concatenate([np.cos(t).reshape((1,res)), np.sin(t).reshape((1,res))], axis = 0)
-    ellipse = np.linalg.solve(L,z)
+    # defining the terminal set contoure
+    terminal_set = ellipse_contoure(P, alpha_opt)
     
-    if (visualize_constraints):    
+    if (visualize_constraints):   
+
         # defining the state  polytopic constraints
-        p = pc.Polytope(G_x, f_x)
+        poly = pc.Polytope(G_x, f_x)
+        
         # plotting
-        p.plot(color = 'pink')
-        plt.plot(ellipse[0,:], ellipse[1,:])
+        poly.plot(color = 'pink')
+        plt.plot(terminal_set[0,:], terminal_set[1,:])
         plt.plot(x0[0], x0[1], 'go')
         plt.title('Constriants')
         plt.xlabel('x1 (position)')
@@ -244,6 +256,7 @@ def main():
     '''
 
     x_current = x0
+    terminal_set_scaled = terminal_set # the scaled terminal set for the terminal state
     
     # state buffer
     x_hist1 = [x_current[0,0]]
@@ -251,38 +264,50 @@ def main():
 
         
     # plotting terminal set
-    elp1 = ellipse[0,:].tolist() 
-    elp2 = ellipse[1,:].tolist() 
+    elp1 = terminal_set[0,:].tolist() 
+    elp2 = terminal_set[1,:].tolist() 
     
+    # plotting the scaled terminal set
+    elp1_N = terminal_set_scaled[0,:].tolist()
+    elp2_N = terminal_set_scaled[1,:].tolist()
+
     # plotting planned trajectory
     traj1 = [x0[0]]
     traj2 = [x0[1]]
 
     # plotting options
-    fig  = plt.figure()
-    ax    = fig.add_subplot(111)
-    
-    dyn,  = ax.plot(x_hist1, x_hist2, '-o')
-    elp,  = ax.plot(elp1, elp2)
-    tra,  = ax.plot(traj1, traj2, '-o') 
-    
+    poly.plot(color = 'pink') 
+    dyn,  = plt.plot(x_hist1, x_hist2, '-o')
+    elp,  = plt.plot(elp1, elp2)
+    elp_N, = plt.plot(elp1_N, elp2_N)
+    tra,  = plt.plot(traj1, traj2, '-o') 
+     
     
     plt.title('System Dynamics')
     plt.xlabel('x1 (position)')
     plt.ylabel('x2 (velocity)') 
-    ax.legend(['true trajectory', 'terminal set', 'planned trajectory'])
+    
+    plt.legend(['true trajectory',
+                'terminal set', 
+                'scaled terminal set', 
+                'planned trajectory',
+                'state constraints'])
     plt.ion()
     plt.show()
 
     for i in range(sim_steps):
         u0, traj = controller.solve(x_current)
+        terminal_set_scaled = ellipse_contoure(P, controller.terminalset_scaled(traj[-x_dim,:]))
         x_next =  simulate_dynamics(dynamics,x_current, u = u0, steps = 1, plot = False)
-                
+                    
         x_hist1.append(x_next[0,0])
         x_hist2.append(x_next[1,0])
         
         traj1 = traj[:,0].tolist()
         traj2 = traj[:,1].tolist()
+
+        elp1_N = terminal_set_scaled[0,:].tolist()
+        elp2_N = terminal_set_scaled[1,:].tolist()
 
         tra.set_xdata(traj1)
         tra.set_ydata(traj2)
@@ -290,8 +315,9 @@ def main():
         dyn.set_ydata(x_hist2[:-1])
         elp.set_xdata(elp1)
         elp.set_ydata(elp2)
-
-        plt.pause(0.1)
+        elp_N.set_xdata(elp1_N)
+        elp_N.set_ydata(elp2_N)
+        plt.pause(0.01)
 
         x_current = x_next
 

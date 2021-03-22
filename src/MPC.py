@@ -263,6 +263,11 @@ class SMPC:
         #print("terminal state: ", [traj[-1,0], traj[-1,1]])
         #print("terminal slack: ", sol.value(self.eps_s_p))
         return u0, traj
+    
+
+    def terminalset_scaled(self, x_N):
+        alpha_N = x_N.T@self.P@x_N
+        return alpha_N
 
     def check_hard_feasibility(self, sol):
         '''
