@@ -71,14 +71,14 @@ class SMPC:
         self.eps_s_p = None
         
         # solver tolerance
-        self.tol = 1e-8
-
-        # check if slack variables are zero
-        self.zero_slack = False
-        
+        self.tol = 1e-6
+ 
         # define a dynamics callback 
         self.dynamics = dynamics
-    
+        
+        # define the controller status
+        self.status = {'enabled': True, 'zero_slack': False}
+
     def setup(self):
 
         ''' 
@@ -232,23 +232,27 @@ class SMPC:
                                                                                        2*self.f_x[i]*eps_s_p[i]) 
         pass
 
-    def solve(self, x0):
+    def check_slack(self,x0):
         
         # solve slack problem
         self.opti_slack.set_value(self.x0, x0)
-        sol = self.opti_slack.solve()
+        slack_sol = self.opti_slack.solve()
          
         # check slack variables
-        self.check_hard_feasibility(sol)
+        self.check_hard_feasibility(slack_sol)
+        
+        return slack_sol
 
+    def solve(self, x0, slack_sol):
+    
         # warm start perf problem
-        self.opti_perf.set_initial(self.x_p, sol.value(self.x))
-        self.opti_perf.set_initial(self.u_p, sol.value(self.u))
+        self.opti_perf.set_initial(self.x_p, slack_sol.value(self.x))
+        self.opti_perf.set_initial(self.u_p, slack_sol.value(self.u))
         
         # initialize the parameters of the performance optimization
         self.opti_perf.set_value(self.x0_p, x0)
-        self.opti_perf.set_value(self.eps_s_p, sol.value(self.eps_s))
-        self.opti_perf.set_value(self.eps_i_p, sol.value(self.eps_i))
+        self.opti_perf.set_value(self.eps_s_p, slack_sol.value(self.eps_s))
+        self.opti_perf.set_value(self.eps_i_p, slack_sol.value(self.eps_i))
         
         # solve the performance optimization
         sol = self.opti_perf.solve()
@@ -259,9 +263,11 @@ class SMPC:
         x_dim = self.x_dim
         u0    = sol.value(self.u_p)[:u_dim].reshape((u_dim,1))
         traj  = sol.value(self.x_p).reshape((self.N, x_dim))
+        
         #print("current state: ", [traj[0,0], traj[0,1]])
         #print("terminal state: ", [traj[-1,0], traj[-1,1]])
         #print("terminal slack: ", sol.value(self.eps_s_p))
+        
         return u0, traj
     
 
@@ -277,21 +283,16 @@ class SMPC:
             be disabled and the (learning controller + safety filter) will be 
             enabled
         '''
-
         norm = np.linalg.norm(np.concatenate([sol.value(self.eps_i), sol.value(self.eps_s)], axis = 0))
         print("slack norm ", norm)
         if norm < self.tol:
-
-            self.zero_slack = True
-            print("safety filter can be enabled")
-            print(" ") 
-            print(" ") 
-            print(" ") 
-            print(" ") 
-            print(" ") 
-            print(" ") 
-            print(" ") 
-            print(" ") 
+            self.status['zero_slack'] = True
+            self.status['enabled'] = False
+            print("safety filter enabled. Learning initiated")
+        else:
+            self.status['zero_slack'] = False
+            self.status['enabled'] = True
+            print("Stabilizing controller enabled. Learning inhibited")
         pass
 
 
