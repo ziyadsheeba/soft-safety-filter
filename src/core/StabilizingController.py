@@ -58,17 +58,17 @@ class SMPC:
             self.u_dim = 1
 
         # solver variable/parameter pointers for slack optimization 
-        self.x0      = None
-        self.eps_i   = None        
-        self.eps_s   = None
-        self.u       = None
-        self.x       = None
-        
+        self.x0        = None
+        self.eps_i     = None        
+        self.eps_s     = None
+        self.u         = None
+        self.x         = None
+        self.slack_sol = None # used to warm start 
         # solver variable/parameter pointers for performance optimization
-        self.u_p     = None
-        self.x_p     = None
-        self.eps_i_p = None
-        self.eps_s_p = None
+        self.u_p       = None
+        self.x_p       = None
+        self.eps_i_p   = None
+        self.eps_s_p   = None
         
         # solver tolerance
         self.tol = 1e-6

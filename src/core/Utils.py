@@ -23,11 +23,13 @@ class TerminalComponents:
         if not (dynamics_type == 'linear') and not (dynamics_type== 'nonlinear'):
            raise Exception("dynamics_type must be either 'linear' or 'nonlinear' ")
         
-             
+        self.x_dim    = A.shape[0]
+        self.u_dim    = B.shape[1]
+
         self.A             = A
         self.B             = B
         self.Q             = Q
-        self.R             = R
+        self.R             = np.array(R).reshape(self.u_dim,1)
         self.G_x           = G_x
         self.G_u           = G_u
         self.f_x           = f_x
@@ -36,9 +38,7 @@ class TerminalComponents:
         self.dynamics_type = dynamics_type
         self.dynamics = dynamics  
         
-        self.x_dim    = A.shape[0]
-        self.u_dim    = B.shape[1]
-        
+                
         self.P = None
         self.K = None
 
@@ -96,11 +96,11 @@ class TerminalComponents:
         low = 0
         high = alpha_opt
         while bisection_error <= high-low:
-            print("bisection error: ", high-low)
-            print("high: ", high)
-            print("low: ", low)
-            if(not self._is_invariant(high) and not self._sufficient_decrease(high)):
-                high = (high-low)/2 + low
+             
+            invariant     = self._is_invariant(high)
+            suff_decrease = self._sufficient_decrease(high)
+            if(not invariant or not suff_decrease):
+                high = (high-low)/2 + low 
             else:
                 if high == alpha_opt:
                     break
@@ -115,20 +115,19 @@ class TerminalComponents:
 
         x     = opti.variable(self.x_dim,1)
         alpha = opti.parameter()
-
-        opti.minimize(-x[0] - x[1])
-        opti.subject_to(self.dynamics(x,self.K@x).T@self.P@self.dynamics(x,self.K@x) >= alpha)
+        f = (self.dynamics(x, self.K@x).T)@self.P@(self.dynamics(x,self.K@x))
+        opti.minimize(-f) 
         opti.subject_to(x.T@self.P@x <= alpha)
-        opti.subject_to(x[0]>=0)
+        opti.subject_to(x[0]<=0)
+        opti.set_value(alpha, alpha_opt)
+        sol = opti.solve()
+        val = -sol.value(f)
         
-        try: 
-            opti.set_value(alpha, alpha_opt)
-            sol = opti.solve()
-            invariant =  False
-        except:
+        if val>= alpha_opt:
+            invariant = False
+        else:
             invariant =  True
         return invariant
-
     def _sufficient_decrease(self,alpha_opt):
         opti = casadi.Opti()
         opti.solver('ipopt')
@@ -136,15 +135,16 @@ class TerminalComponents:
         alpha = opti.parameter()
 
         f = self.dynamics(x,self.K@x).T@self.P@self.dynamics(x, self.K@x)  - x.T@(self.P - self.Q - self.K.T@self.R@self.K)@x
-        opti.minimize(f)
+        opti.minimize(-f)
         opti.subject_to(x[0]>=0)
         opti.subject_to(x.T@self.P@x<= alpha_opt)
         
         opti.set_value(alpha, alpha_opt)
         sol = opti.solve()
-
-        if (sol.value(f)<= 1e-7):
+        
+        val = sol.value(f) 
+        if (val <= 1e-7):
             suff_decrease = True
         else:
             suff_decrease = False
-            
+        return suff_decrease 

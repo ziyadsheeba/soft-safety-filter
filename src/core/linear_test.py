@@ -5,6 +5,7 @@ import numpy as np
 from numpy.linalg import eig
 from scipy.linalg import expm
 from scipy.linalg import solve_discrete_are
+from Utils import TerminalComponents
 from StabilizingController import SMPC
 from SafetyFilter import MPSafetyFilter
 from LearningController import LearningController
@@ -161,20 +162,7 @@ def main():
     '''
     stable = isstable(A) 
     print("system stable: ", str(stable))
-      
-    '''
-        Solve DARE 
-    '''
-    
-                    
-    P = solve_discrete_are(A, B, Q, R)    # infinite LQR weight penalty
-    
-    '''
-        Define the LQR state feedback matrix
-    '''
-    
-    K = np.linalg.solve(R + B.T@P@B, -B.T@P@A)
-        
+              
     '''
         Define state and input constraint matrices
         -state constraints: 
@@ -191,83 +179,37 @@ def main():
     f_u = np.array([u_max, -u_min], ndmin = 1).reshape((2,1))
     
     '''
-        Solve for an ellipsoidal terminal set that respects only input constraints.
-        
-        - The ellipsoidal terminal set is a lyaponov level set of the system after
-          applying the LQR feedback controller
-
-        - Need to ensure that theterminal controller satisfies the input constraints 
-          within the set
-
-        - Solved in closed form using support functions. Check MPC lecture notes 
-          chapter 5 slide 62
-                        
-                        x.T@P@x <= alpha
-        
+        Compute the terminal set components 
     '''
-    G_x_u = G_u@K
-    f_x_u = f_u
-    
-    alpha_opt_stabilizing = 0
-    N_const   = len(f_x_u) # number of constraints
-    
-    for i in range(N_const):
-        F = G_x_u[i,:].reshape((1,x_dim))
-        alpha = (f_x_u[i]**2)/(F@np.linalg.inv(P)@F.T)
-        alpha = alpha.flatten()[0]
-        if i == 0:
-            alpha_opt_stabilizing = alpha
-        elif(alpha<alpha_opt_stabilizing):
-            alpha_opt_stabilizing = alpha
-    print("optimal level set for stabilizing controller: ", alpha_opt_stabilizing)
-    assert alpha_opt_stabilizing > 0
+    terminal_obj = TerminalComponents(A = A,
+                                      B = B,
+                                      Q = Q,
+                                      R = R,
+                                      G_x = G_x,
+                                      f_x = f_x,
+                                      G_u = G_u,
+                                      f_u = f_u,
+                                      dynamics_type = "nonlinear",
+                                      dynamics = dynamics)
 
-    '''
-        Solve for an ellipsoidal terminal set that respects only input constraints and state
-        constraints for the safety filter.
-        
-        - The ellipsoidal terminal set is a lyaponov level set of the system after
-          applying the LQR feedback controller
+    alpha_opt_stabilizing, P = terminal_obj.compute_terminal_set(mode = 'input')
+    alpha_opt_filter, _ = terminal_obj.compute_terminal_set(mode = 'both')
 
-        - Need to ensure that theterminal controller satisfies the input constraints 
-          within the set
+    print("stabilizing controller level set: ", alpha_opt_stabilizing)
+    print("filter level set: ", alpha_opt_filter)
 
-        - Solved in closed form using support functions. Check MPC lecture notes 
-          chapter 5 slide 62
-                        
-                        x.T@P@x <= alpha
-        
-    '''
-    G_x_u = np.concatenate([G_u@K, G_x], axis = 0)
-    f_x_u = np.concatenate([f_u, f_x], axis = 0)
-    
-    alpha_opt_filter = 0
-    N_const   = len(f_x_u) # number of constraints
-    
-    for i in range(N_const):
-        F = G_x_u[i,:].reshape((1,x_dim))
-        alpha = (f_x_u[i]**2)/(F@np.linalg.inv(P)@F.T)
-        alpha = alpha.flatten()[0]
-        if i == 0:
-            alpha_opt_filter = alpha
-        elif(alpha<alpha_opt_filter):
-            alpha_opt_filter = alpha
-
-    print("optimal level set for safety filter: ", alpha_opt_filter)
-    assert alpha_opt_filter > 0
-    
     '''
         visualize constraints and the ellipsoidal set
-    ''' 
-    # defining the terminal set contoure
+    '''
+
+    # defining the ellipse coordinates
     terminal_set_stabilizing = ellipse_contoure(P, alpha_opt_stabilizing)
     terminal_set_filter = ellipse_contoure(P, alpha_opt_filter)
-     
-    if (visualize_constraints):   
+    if (visualize_constraints):
 
         # defining the state  polytopic constraints
         poly = pc.Polytope(G_x, f_x)
-        
+
         # plotting
         poly.plot(color = 'pink')
         plt.plot(terminal_set_stabilizing[0,:], terminal_set_stabilizing[1,:])
@@ -276,10 +218,10 @@ def main():
         plt.title('Constriants')
         plt.xlabel('x1 (position)')
         plt.ylabel('x2 (velocity)')
-        plt.legend(['terminal set (stabilizing MPC)', 'terminal set (saftey filter)', 'initial condition','state constriants'])
+        plt.legend(['terminal set (controller)','terminal set (filter)','initial condition','state constriants'])
         plt.show()
 
- 
+
     '''
         Instantiate the soft MPC model, the safety filter and the learning controller
     '''

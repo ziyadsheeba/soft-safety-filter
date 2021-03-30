@@ -112,7 +112,7 @@ def main():
     '''
     visualize_constraints = True
     sim_steps             = 1000
-    N                     = 60
+    N                     = 40
     
     #constraints
 
@@ -128,11 +128,11 @@ def main():
     n_u_const             = 2
      
     #initial condition
-    x0                    = np.array([0.685444, -1]).reshape(2,1)
+    x0                    = np.array([3, -4]).reshape(2,1)
     
     # system parameters
-    k1                    = 1     # linear spring factor      
-    k2                    = 1     # cubic spring factor
+    k1                    = 1         # linear spring factor      
+    k2                    = 0.0       # cubic spring factor
     c                     = 0.1       
     m                     = 0.5
     
@@ -142,7 +142,7 @@ def main():
 
     # stage cost matrices
     Q = 1*np.array([[1, 0], [0, 1]])           #state quadratic weights        
-    R = 10*np.array([1]).reshape(u_dim,u_dim)  #input quadratic weights  
+    R = 20*np.array([1]).reshape(u_dim,u_dim)   #input quadratic weights  
     S = 10*np.eye(n_x_const)                   #slack quadratic weights
     gamma = 1000                               #slack linear weight
    
@@ -151,7 +151,7 @@ def main():
         Define the dynamics
     '''
 
-    freq = 50           # sampling frequecy in Hz
+    freq = 100          # sampling frequecy in Hz
     T    = 1/freq       # sampling time
     
     
@@ -172,11 +172,11 @@ def main():
 
 
     '''
-        Apply exact discretization to the system.
+        Determine the discretized linear system dynamics matrices
     '''
 
-    A, B = exact_discretization(A_c, B_c, T)
-     
+    A    = np.array([[1, T],[-k1*T/m, 1-(c*T/m)]]) 
+    B    = np.array([0, T/m]).reshape(x_dim, u_dim)  
     
     '''
         Define state and input constraint matrices
@@ -196,6 +196,7 @@ def main():
     '''
         Compute the terminal set components 
     '''
+    dynamics = dynamics_wrapper(T, m, c, k1, k2, mode = 'opt')
     terminal_obj = TerminalComponents(A = A,
                                       B = B, 
                                       Q = Q, 
@@ -347,13 +348,12 @@ def main():
         plt.pause(0.01)
 
         x_current = x_next
-        print(x_current)
-        if (i+1)%100 == 0:
-            x_current = np.random.uniform(low = -1.5, high = 1.5, size = (x_dim,1)).reshape(x_dim,1)
+        if (i+1)%200 == 0:
+            x_current = np.random.uniform(low = -2, high = 2, size = (x_dim,1)).reshape(x_dim,1)
             x_hist1 = [x_current[0,0]]
             x_hist2 = [x_current[1,0]]
+            print(i)
             print('singular disturbance applied')
-            print(x_current)
 
 
  
