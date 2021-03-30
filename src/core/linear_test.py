@@ -108,7 +108,7 @@ def main():
     n_u_const             = 2
      
     #initial condition
-    x0                    = np.array([2,-1]).reshape(2,1)
+    x0                    = np.array([1.3,-1]).reshape(2,1)
     
     # system parameters
     k                     = 1       
@@ -361,18 +361,18 @@ def main():
         else:
             u0, traj = stabilizing_controller.solve(x_current, slack_sol)
             terminal_set_stabilizing_scaled = ellipse_contoure(P, stabilizing_controller.terminalset_scaled(traj[-x_dim,:]))
+            
             traj1 = traj[:,0].tolist()
             traj2 = traj[:,1].tolist()
             
+            elp1_N = terminal_set_stabilizing_scaled[0,:].tolist()
+            elp2_N = terminal_set_stabilizing_scaled[1,:].tolist()
+    
         x_next =  simulate_dynamics(dynamics,x_current, u = u0, steps = 1, plot = False)
 
         x_hist1.append(x_next[0,0])
         x_hist2.append(x_next[1,0])
-        
-        
-        elp1_N = terminal_set_stabilizing_scaled[0,:].tolist()
-        elp2_N = terminal_set_stabilizing_scaled[1,:].tolist()
-        
+                
         elp1_s = terminal_set_filter[0,:].tolist()
         elp2_s = terminal_set_filter[1,:].tolist()
 
