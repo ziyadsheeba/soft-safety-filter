@@ -91,8 +91,23 @@ class TerminalComponents:
     
     def _compute_invariant_set_nonlinear(self, mode):
         alpha_opt, _ = self._compute_invariant_set_linear(mode)
-        while(not self._is_invariant(alpha_opt) and not _sufficient_decrease(alpha_opt)):
-            alpha_opt = alpha_opt/2
+ 
+        bisection_error = 1e-5
+        low = 0
+        high = alpha_opt
+        while bisection_error <= high-low:
+            print("bisection error: ", high-low)
+            print("high: ", high)
+            print("low: ", low)
+            if(not self._is_invariant(high) and not self._sufficient_decrease(high)):
+                high = (high-low)/2 + low
+            else:
+                if high == alpha_opt:
+                    break
+                low_aux = low
+                low  = high
+                high = high + (high-low_aux)/2 
+        alpha_opt = high
         return alpha_opt, self.P  
     def _is_invariant(self, alpha_opt):
         opti = casadi.Opti()
@@ -116,14 +131,14 @@ class TerminalComponents:
 
     def _sufficient_decrease(self,alpha_opt):
         opti = casadi.Opti()
-        iopti.solver('ipopt')
+        opti.solver('ipopt')
         x = opti.variable(self.x_dim,1)
         alpha = opti.parameter()
 
-        f = dynamics(x,K@x).T@P@dynamics(x, K@x)  - x.T@(P - Q - K.T@R@K)@x
+        f = self.dynamics(x,self.K@x).T@self.P@self.dynamics(x, self.K@x)  - x.T@(self.P - self.Q - self.K.T@self.R@self.K)@x
         opti.minimize(f)
         opti.subject_to(x[0]>=0)
-        opti.subject_to(x.T@P@x<= alpha_opt)
+        opti.subject_to(x.T@self.P@x<= alpha_opt)
         
         opti.set_value(alpha, alpha_opt)
         sol = opti.solve()

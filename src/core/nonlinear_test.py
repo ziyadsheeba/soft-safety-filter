@@ -112,7 +112,7 @@ def main():
     '''
     visualize_constraints = True
     sim_steps             = 1000
-    N                     = 20
+    N                     = 60
     
     #constraints
 
@@ -128,11 +128,11 @@ def main():
     n_u_const             = 2
      
     #initial condition
-    x0                    = np.array([1, -1]).reshape(2,1)
+    x0                    = np.array([0.685444, -1]).reshape(2,1)
     
     # system parameters
     k1                    = 1     # linear spring factor      
-    k2                    = 0   # cubic spring factor
+    k2                    = 1     # cubic spring factor
     c                     = 0.1       
     m                     = 0.5
     
@@ -144,7 +144,7 @@ def main():
     Q = 1*np.array([[1, 0], [0, 1]])           #state quadratic weights        
     R = 10*np.array([1]).reshape(u_dim,u_dim)  #input quadratic weights  
     S = 10*np.eye(n_x_const)                   #slack quadratic weights
-    gamma = 100                                #slack linear weight
+    gamma = 1000                               #slack linear weight
    
     
     '''
@@ -209,6 +209,10 @@ def main():
 
     alpha_opt_stabilizing, P = terminal_obj.compute_terminal_set(mode = 'input')
     alpha_opt_filter, _ = terminal_obj.compute_terminal_set(mode = 'both') 
+    
+    print("stabilizing controller level set: ", alpha_opt_stabilizing)
+    print("filter level set: ", alpha_opt_filter)
+    
     '''
         visualize constraints and the ellipsoidal set
     '''
@@ -224,11 +228,12 @@ def main():
         # plotting
         poly.plot(color = 'pink')
         plt.plot(terminal_set_stabilizing[0,:], terminal_set_stabilizing[1,:])
+        plt.plot(terminal_set_filter[0,:], terminal_set_filter[1,:])
         plt.plot(x0[0], x0[1], 'go')
         plt.title('Constriants')
         plt.xlabel('x1 (position)')
         plt.ylabel('x2 (velocity)')
-        plt.legend(['terminal set','initial condition','state constriants'])
+        plt.legend(['terminal set (controller)','terminal set (filter)','initial condition','state constriants'])
         plt.show()
 
  
@@ -342,12 +347,14 @@ def main():
         plt.pause(0.01)
 
         x_current = x_next
-
+        print(x_current)
         if (i+1)%100 == 0:
-            print('singular disturbance applied')
-            x_current = np.random.uniform(low = -2, high = 2, size = (x_dim,1)).reshape(x_dim,1)
+            x_current = np.random.uniform(low = -1.5, high = 1.5, size = (x_dim,1)).reshape(x_dim,1)
             x_hist1 = [x_current[0,0]]
             x_hist2 = [x_current[1,0]]
+            print('singular disturbance applied')
+            print(x_current)
+
 
  
 
