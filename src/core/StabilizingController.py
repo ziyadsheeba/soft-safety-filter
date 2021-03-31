@@ -200,7 +200,7 @@ class SMPC:
         '''
             terminal constraint
         '''
-        
+         
         self.opti_slack.subject_to(x[-x_dim:].T@self.P@x[-x_dim:] <= self.alpha)
         self.opti_perf.subject_to(x_p[-x_dim:].T@self.P@x_p[-x_dim:] <= self.alpha)
  
@@ -237,7 +237,7 @@ class SMPC:
         # solve slack problem
         self.opti_slack.set_value(self.x0, x0)
         slack_sol = self.opti_slack.solve()
-         
+
         # check slack variables
         self.check_hard_feasibility(slack_sol)
         
@@ -256,7 +256,6 @@ class SMPC:
         
         # solve the performance optimization
         sol = self.opti_perf.solve()
-
         
         # return the control input along with the planned trajectory
         u_dim = self.u_dim

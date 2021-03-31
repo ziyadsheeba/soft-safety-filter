@@ -41,25 +41,43 @@ class TerminalComponents:
                 
         self.P = None
         self.K = None
-
+        
+        self.eps_Q = 0
+        self.eps_R = 0
+        
         if dynamics_type == 'linear':
             self.compute_terminal_set = self._compute_invariant_set_linear
         if dynamics_type == 'nonlinear':
             self.compute_terminal_set = self._compute_invariant_set_nonlinear
 
     def compute_lqr(self):
-        P_lqr = solve_discrete_are(self.A, self.B, self.Q, self.R) 
+
+        if (self.dynamics_type == 'nonlinear'):
+            self.eps_Q = 2
+            self.eps_R = 2
+        else:
+            self.eps_Q = 0
+            self.eps_R = 0
+
+        eps_I_Q = np.eye(self.x_dim)*self.eps_Q
+        eps_I_R = np.eye(self.u_dim)*self.eps_R
+        
+        P_lqr = solve_discrete_are(self.A, self.B, self.Q + eps_I_Q, self.R + eps_I_R) 
         K_lqr = np.linalg.solve(self.R + self.B.T@P_lqr@self.B, -self.B.T@P_lqr@self.A)  
         
         self.P = P_lqr
         self.K = K_lqr
         pass  
-   
+     
     def _compute_invariant_set_linear(self, mode):
         
         if not (mode == 'input') and not (mode == 'both'):
             raise Exception("mode must be either 'input' or 'both' ")
 
+        #if self.dynamics_type == 'nonlinear':
+        #    self.compute_lqr_nonlinear(c =0.05)
+        #else:
+        
         self.compute_lqr()
         if mode == 'input': 
             ''' 
@@ -118,11 +136,18 @@ class TerminalComponents:
         f = (self.dynamics(x, self.K@x).T)@self.P@(self.dynamics(x,self.K@x))
         opti.minimize(-f) 
         opti.subject_to(x.T@self.P@x <= alpha)
-        opti.subject_to(x[0]<=0)
         opti.set_value(alpha, alpha_opt)
-        sol = opti.solve()
-        val = -sol.value(f)
+ 
+        vals = []
+        restarts = 10
         
+        for i in range(restarts):
+            initial = np.random.normal(loc = 0, scale = 10, size = (self.x_dim,1)).reshape(self.x_dim,1)  
+            opti.set_initial(x, initial)
+            sol = opti.solve()
+            vals.append(sol.value(f))
+        
+        val = max(vals)  
         if val>= alpha_opt:
             invariant = False
         else:
@@ -134,15 +159,31 @@ class TerminalComponents:
         x = opti.variable(self.x_dim,1)
         alpha = opti.parameter()
 
-        f = self.dynamics(x,self.K@x).T@self.P@self.dynamics(x, self.K@x)  - x.T@(self.P - self.Q - self.K.T@self.R@self.K)@x
+        if (self.dynamics_type == 'nonlinear'):
+            self.eps_Q = 2
+            self.eps_R = 2
+        else:
+            self.eps_Q = 0
+            self.eps_R = 0
+
+        eps_I_Q = np.eye(self.x_dim)*self.eps_Q
+        eps_I_R = np.eye(self.u_dim)*self.eps_R
+
+        f = self.dynamics(x,self.K@x).T@self.P@self.dynamics(x, self.K@x)  - x.T@(self.P - (self.Q - eps_I_Q) - self.K.T@(self.R-eps_I_R)@self.K)@x
         opti.minimize(-f)
-        opti.subject_to(x[0]>=0)
         opti.subject_to(x.T@self.P@x<= alpha_opt)
-        
         opti.set_value(alpha, alpha_opt)
-        sol = opti.solve()
+
+        vals = []
+        restarts = 10
         
-        val = sol.value(f) 
+        for i in range(restarts):
+            initial = np.random.normal(loc = 0, scale = 10, size = (self.x_dim,1)).reshape(self.x_dim,1)  
+            opti.set_initial(x, initial)
+            sol = opti.solve()
+            vals.append(sol.value(f))
+        
+        val = max(vals) 
         if (val <= 1e-7):
             suff_decrease = True
         else:

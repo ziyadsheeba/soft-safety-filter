@@ -112,7 +112,7 @@ def main():
     '''
     visualize_constraints = True
     sim_steps             = 1000
-    N                     = 40
+    N                     = 60
     
     #constraints
 
@@ -128,11 +128,11 @@ def main():
     n_u_const             = 2
      
     #initial condition
-    x0                    = np.array([3, -4]).reshape(2,1)
+    x0                    = np.array([-1, 1]).reshape(2,1)
     
     # system parameters
     k1                    = 1         # linear spring factor      
-    k2                    = 0.0       # cubic spring factor
+    k2                    = 1         # cubic spring factor
     c                     = 0.1       
     m                     = 0.5
     
@@ -169,8 +169,7 @@ def main():
     A_c = np.array([[0,1], [-k1/m, -c/m]])     # continous time dynamics matrix
     B_c = np.array([0,1/m], ndmin = 1)        # continous time input matrix
     B_c = B_c.reshape((x_dim,u_dim))
-
-
+6
     '''
         Determine the discretized linear system dynamics matrices
     '''
@@ -349,7 +348,7 @@ def main():
 
         x_current = x_next
         if (i+1)%200 == 0:
-            x_current = np.random.uniform(low = -2, high = 2, size = (x_dim,1)).reshape(x_dim,1)
+            x_current = np.random.uniform(low = -1.2, high = 1.2, size = (x_dim,1)).reshape(x_dim,1)
             x_hist1 = [x_current[0,0]]
             x_hist2 = [x_current[1,0]]
             print(i)
