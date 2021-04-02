@@ -3,7 +3,6 @@ from casadi import *
 from scipy.linalg import solve_discrete_are
 from scipy.linalg import solve_discrete_lyapunov
 
-import ipdb
 class TerminalComponents:
     def __init__(self,A, B, Q, R, G_x, f_x, G_u, f_u, dynamics_type, dynamics):
         
@@ -42,13 +41,15 @@ class TerminalComponents:
         self.P = None
         self.K = None
         
-        self.eps_Q = 0
-        self.eps_R = 0
-        
         if dynamics_type == 'linear':
             self.compute_terminal_set = self._compute_invariant_set_linear
+            self.eps_Q = 0
+            self.eps_R = 0
+
         if dynamics_type == 'nonlinear':
             self.compute_terminal_set = self._compute_invariant_set_nonlinear
+            self.eps_Q = 2
+            self.eps_R = 2
 
     def compute_lqr(self):
 
@@ -74,10 +75,6 @@ class TerminalComponents:
         if not (mode == 'input') and not (mode == 'both'):
             raise Exception("mode must be either 'input' or 'both' ")
 
-        #if self.dynamics_type == 'nonlinear':
-        #    self.compute_lqr_nonlinear(c =0.05)
-        #else:
-        
         self.compute_lqr()
         if mode == 'input': 
             ''' 
@@ -158,13 +155,6 @@ class TerminalComponents:
         opti.solver('ipopt')
         x = opti.variable(self.x_dim,1)
         alpha = opti.parameter()
-
-        if (self.dynamics_type == 'nonlinear'):
-            self.eps_Q = 2
-            self.eps_R = 2
-        else:
-            self.eps_Q = 0
-            self.eps_R = 0
 
         eps_I_Q = np.eye(self.x_dim)*self.eps_Q
         eps_I_R = np.eye(self.u_dim)*self.eps_R

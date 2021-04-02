@@ -22,7 +22,7 @@ class MPSafetyFilter:
             f_x         : rhs of state constraints
             G_u         : inputs constraint matrix
             f_u         : rhs of input constraints
-            alpha       : terminal set level-set defined by P
+            alpha       : ellipsoidal level-set defined by matrix P
             N           : horizon length
         '''
         

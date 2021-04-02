@@ -63,13 +63,20 @@ class SMPC:
         self.eps_s     = None
         self.u         = None
         self.x         = None
-        self.slack_sol = None # used to warm start 
+        self.slack_sol = None
+        self.slack_f   = None # slack optimization objective
+        
         # solver variable/parameter pointers for performance optimization
         self.u_p       = None
         self.x_p       = None
         self.eps_i_p   = None
         self.eps_s_p   = None
+        self.perf_f    = None # performance optimization objective
         
+        # logging variables
+        self.slack_costs = []
+        self.perf_costs  = [] 
+
         # solver tolerance
         self.tol = 1e-6
  
@@ -77,8 +84,8 @@ class SMPC:
         self.dynamics = dynamics
         
         # define the controller status
-        self.status = {'enabled': True, 'zero_slack': False}
-
+        self.status = {'enabled': True, 'zero_slack': False, 'log_costs': True}
+        
     def setup(self):
 
         ''' 
@@ -149,21 +156,24 @@ class SMPC:
         ones_i = np.ones([eps_i.shape[1], eps_i.shape[0]])
         ones_s = np.ones([eps_s.shape[1], eps_s.shape[0]])
         
-        self.opti_slack.minimize(eps_i.T@S_telda@eps_i + 
-                                 self.gamma*ones_i@eps_i +
-                                 (I_rep@eps_s).T@S_telda@(I_rep@eps_s) + 
-                                 self.gamma*ones_i@(I_rep@eps_s) + 
-                                 eps_s.T@self.S@eps_s + 
-                                 self.gamma*ones_s@eps_s)
+        self.slack_f = eps_i.T@S_telda@eps_i +  self.gamma*ones_i@eps_i + \
+                       (I_rep@eps_s).T@S_telda@(I_rep@eps_s) + \
+                       self.gamma*ones_i@(I_rep@eps_s) + \
+                       eps_s.T@self.S@eps_s + \
+                       self.gamma*ones_s@eps_s
+        
+        self.opti_slack.minimize(self.slack_f)
         
         
         # performance
         Q_telda = np.kron(np.eye(N), self.Q)
         R_telda = np.kron(np.eye(N-1), self.R)
         
-        self.opti_perf.minimize(x_p.T@Q_telda@x_p + 
-                                u_p.T@R_telda@u_p + 
-                                x_p[-x_dim:].T@self.P@x_p[-x_dim:])
+        self.perf_f = x_p.T@Q_telda@x_p + u_p.T@R_telda@u_p + \
+                      x_p[-x_dim:].T@self.P@x_p[-x_dim:] 
+        
+        self.opti_perf.minimize(self.perf_f)
+
         '''
             dynamics constraint
         '''
@@ -257,6 +267,10 @@ class SMPC:
         # solve the performance optimization
         sol = self.opti_perf.solve()
         
+        # log the costs
+        if self.status['log_costs'] == True:
+            self.log_costs(slack_sol, sol)
+
         # return the control input along with the planned trajectory
         u_dim = self.u_dim
         x_dim = self.x_dim
@@ -294,4 +308,9 @@ class SMPC:
             print("Stabilizing controller enabled. Learning inhibited")
         pass
 
+    def log_costs(self, slack_sol, perf_sol):
+        self.slack_costs.append(slack_sol.value(self.slack_f))
+        self.perf_costs.append(perf_sol.value(self.perf_f))
+        
+            
 
