@@ -10,6 +10,8 @@ from casadi import *
 import numpy as np
 from scipy.linalg import fractional_matrix_power
 import math
+import pickle
+import dill
 import ipdb
 
 class SMPC:
@@ -84,7 +86,7 @@ class SMPC:
         self.dynamics = dynamics
         
         # define the controller status
-        self.status = {'enabled': True, 'zero_slack': False, 'log_costs': True, 'learn_controller': False}
+        self.status = {'enabled': True, 'zero_slack': False, 'log_costs': True, 'setup': False}
         
     def setup(self):
 
@@ -94,6 +96,8 @@ class SMPC:
              only the objective will vary between slack and perf.
              uses the l1 norm for exactness
         '''
+        self.status['setup'] = True
+
         N       = self.N
         x_dim   = self.x_dim
         u_dim   = self.u_dim
@@ -310,7 +314,23 @@ class SMPC:
 
     def log_costs(self, slack_sol, perf_sol):
         self.slack_costs.append(slack_sol.value(self.slack_f))
-        self.perf_costs.append(perf_sol.value(self.perf_f))
-        
-            
+        self.perf_costs.append(perf_sol.value(self.perf_f)) 
+    
+    def save(self, filename):
+        if self.status['setup'] == False:
+            with open(filename, 'wb') as output:
+                dill.dump(self,output)
+        else:
+            raise Exception('must save the controller before setting it up. Casadi variables cannot be pickled.')
 
+    def __getstate__(self):
+        attributes = self.__dict__.copy()
+        del attributes['opti_slack']
+        del attributes['opti_perf']
+        return attributes
+    
+    def __setstate__(self, state):
+        self.__dict__ = state
+        self.opti_slack = casadi.Opti()
+        self.opti_perf = casadi.Opti()
+        pass

@@ -10,6 +10,7 @@ from casadi import *
 import numpy as np
 from scipy.linalg import fractional_matrix_power
 import math
+import dill
 import ipdb
 
 class MPSafetyFilter:
@@ -51,13 +52,16 @@ class MPSafetyFilter:
         self.dynamics = dynamics
 
         # define the Safety Filter status
-        self.status = {'feasible': True}
+        self.status = {'feasible': True, 'setup': False}
     
     def setup(self):
 
         ''' 
              setup the optimization problem proposed in casadi opti.
         '''
+        
+        self.status['setup'] = True
+
         N       = self.N
         x_dim   = self.x_dim
         u_dim   = self.u_dim
@@ -139,4 +143,21 @@ class MPSafetyFilter:
         # return the control input along with the planned trajectory
         u0    = sol.value(self.u)[:self.u_dim].reshape((self.u_dim,1))
         
-        return u0 
+        return u0
+    
+    def save(self, filename):
+        if self.status['setup'] == False:
+            with open(filename, 'wb') as output:
+                dill.dump(self, output)
+        else:
+            raise Exception('must save the controller before setting it up. Casadi variables cannot be pickled.')
+
+    def __getstate__(self):
+        attributes = self.__dict__.copy()
+        del attributes['opti']
+        return attributes
+
+    def __setstate__(self, state):
+        self.__dict__ = state
+        self.opti = casadi.Opti()
+

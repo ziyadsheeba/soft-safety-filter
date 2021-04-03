@@ -54,13 +54,6 @@ class TerminalComponents:
 
     def compute_lqr(self):
 
-        if (self.dynamics_type == 'nonlinear'):
-            self.eps_Q = 2
-            self.eps_R = 2
-        else:
-            self.eps_Q = 0
-            self.eps_R = 0
-
         eps_I_Q = np.eye(self.x_dim)*self.eps_Q
         eps_I_R = np.eye(self.u_dim)*self.eps_R
         
@@ -125,6 +118,7 @@ class TerminalComponents:
                 high = high + (high-low_aux)/2 
         alpha_opt = high
         return alpha_opt, self.P  
+    
     def _is_invariant(self, alpha_opt):
         opti = casadi.Opti()
         opti.solver('ipopt')
@@ -151,6 +145,7 @@ class TerminalComponents:
         else:
             invariant =  True
         return invariant
+    
     def _sufficient_decrease(self,alpha_opt):
         opti = casadi.Opti()
         opti.solver('ipopt')
@@ -214,8 +209,8 @@ class ReplayBuffer:
         """
         Call when updating the agent networks
         """
-        data = dict(state= np.concatenate(self.state_buf).reshape(len(self.state_buf, self.x_dim)), 
-                    act  = np.concatenate(self.act_buf).reshape(len(self.act_buf, self.u_dim)))
+        data = dict(state= np.concatenate(self.state_buf).reshape(len(self.state_buf), self.x_dim), 
+                    act  = np.concatenate(self.act_buf).reshape(len(self.act_buf), self.u_dim))
 
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}
  
