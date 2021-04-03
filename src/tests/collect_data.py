@@ -20,6 +20,7 @@ from casadi import *
 import matplotlib.pyplot as plt
 import polytope as pc
 import dill
+import torch
 import ipdb
 def simulate_dynamics(dynamics, x0, u, steps = 10000, plot = True):
     '''
@@ -82,10 +83,10 @@ def main():
         Files and directories
     '''
     models_path = '../models/controllers/'
-    stabilizing_controller_path = models_path + 'stabilizing_controller_nonlinear.pkl' 
-    safety_filter_path = models_path + 'safety_filter_nonlinear.pkl' 
+    stabilizing_controller_path = models_path + 'stabilizing_controller_linear.pkl' 
+    safety_filter_path = models_path + 'safety_filter_linear.pkl' 
     learning_controller_path = models_path + 'learning_controller.pkl' 
-    
+    data_path = '../data/'
     '''
         Import the created controller
     '''
@@ -98,7 +99,7 @@ def main():
         Define options and flags
     '''
     visualize_constraints = True
-    sim_steps             = 50000
+    sim_steps             = 100
     
     #initial condition
     x0                    = np.array([-1,1]).reshape(2,1)
@@ -131,7 +132,7 @@ def main():
         visualize constraints and the ellipsoidal set
     '''
 
-    # defining the ellipse coordinates
+    # defining the ellipse contours for visualization
     terminal_set_stabilizing = ellipse_contoure(P, alpha_stabilizing)
     terminal_set_filter = ellipse_contoure(P, alpha_filter)
     if (visualize_constraints):
@@ -156,124 +157,120 @@ def main():
     stabilizing_controller.setup()
     safety_filter.setup() 
     
-    # Simulate the controller
+    # instantiate a replay buffer for data storage
+    buffer = ReplayBuffer(state_dim = x_dim, act_dim = u_dim)
 
-    x_current = x0
-    terminal_set_stabilizing_scaled = terminal_set_stabilizing # the scaled terminal set for the terminal state
+    # create a grid of the state space
+    resolution = 0.1 
+    x_max = 1
+    x_min = -1
+    N = int((x_max-x_min)//resolution)
+    x1 = np.linspace(x_min,x_max,N)
+    x2 = np.linspace(x_min,x_max,N)
+    x1, x2 = np.meshgrid(x1,x2)
+    x0_mesh = np.stack([x1,x2], axis = 2)
     
-    # state buffer
-    x_hist1 = [x_current[0,0]]
-    x_hist2 = [x_current[1,0]]
-
-        
-    # plotting terminal set for the stabilizing controller
-    elp1 = terminal_set_stabilizing[0,:].tolist() 
-    elp2 = terminal_set_stabilizing[1,:].tolist() 
-    
-    # plotting the scaled terminal set for the stabilizing controller
-    elp1_N = terminal_set_stabilizing_scaled[0,:].tolist()
-    elp2_N = terminal_set_stabilizing_scaled[1,:].tolist()
-
-    # plotting the terminal set for the safety filter
-    elp1_s = terminal_set_filter[0,:].tolist()
-    elp2_s = terminal_set_filter[1,:].tolist()
-
-
-
-    # plotting planned trajectory
-    traj1 = [x0[0]]
-    traj2 = [x0[1]]
-
-    # plotting options
-    poly.plot(color = 'pink') 
-    dyn,  = plt.plot(x_hist1, x_hist2, '-o')
-    elp,  = plt.plot(elp1, elp2)
-    elp_N, = plt.plot(elp1_N, elp2_N)
-    elp_s, = plt.plot(elp1_s, elp2_s)
-    tra,  = plt.plot(traj1, traj2, '-o') 
-     
-    
-    plt.title('System Dynamics')
-    plt.xlabel('x1 (position)')
-    plt.ylabel('x2 (velocity)') 
-    
-    plt.legend(['true trajectory',
-                'controller terminal set', 
-                'scaled terminal set', 
-                'filter terminal set', 
-                'planned trajectory',
-                'state constraints'])
-    plt.ion()
-    plt.show()
-
-    for i in range(sim_steps):
-
-        slack_sol = stabilizing_controller.check_slack(x_current) 
-        if stabilizing_controller.status['zero_slack']:
-            u_L      = learning_controller.get_action(x_current)
-            u_filter = safety_filter.solve(x_current, u_L)
-            u0 = u_filter
-            traj1 = []
-            traj2 = []
-            elp1_N = []
-            elp2_N = []
-
-        else:
-            u0, traj = stabilizing_controller.solve(x_current, slack_sol)
-            terminal_set_stabilizing_scaled = ellipse_contoure(P, stabilizing_controller.terminalset_scaled(traj[-x_dim,:]))
-             
-            traj1 = traj[:,0].tolist()
-            traj2 = traj[:,1].tolist()
+    for i in range(N-1):
+        for j in range(N-1):
             
-            elp1_N = terminal_set_stabilizing_scaled[0,:].tolist()
-            elp2_N = terminal_set_stabilizing_scaled[1,:].tolist()
-        
-        x_next =  simulate_dynamics(dynamics,x_current, u = u0, steps = 1, plot = False)
+            x0 = x0_mesh[i,j,:].reshape(x_dim,1)
 
-        x_hist1.append(x_next[0,0])
-        x_hist2.append(x_next[1,0])
-                
-        elp1_s = terminal_set_filter[0,:].tolist()
-        elp2_s = terminal_set_filter[1,:].tolist()
-
-        tra.set_xdata(traj1)
-        tra.set_ydata(traj2)
-        dyn.set_xdata(x_hist1[:-1])
-        dyn.set_ydata(x_hist2[:-1])
-        elp.set_xdata(elp1)
-        elp.set_ydata(elp2)
-        elp_N.set_xdata(elp1_N)
-        elp_N.set_ydata(elp2_N)
-        elp_s.set_xdata(elp1_s)
-        elp_s.set_ydata(elp2_s)
-
-        plt.pause(0.01)
-
-        x_current = x_next
-                
-        if (i+1)%60== 0:
-            print('singular disturbance applied')
-            x_current = np.random.uniform(low = -1.2, high = 1.2, size = (x_dim,1)).reshape(x_dim,1)
+            # Simulate the controller
+            x_current = x0
+            terminal_set_stabilizing_scaled = terminal_set_stabilizing # the scaled terminal set for the terminal state
+    
+            # state buffer
             x_hist1 = [x_current[0,0]]
             x_hist2 = [x_current[1,0]]
+
+        
+            # plotting terminal set for the stabilizing controller
+            elp1 = terminal_set_stabilizing[0,:].tolist() 
+            elp2 = terminal_set_stabilizing[1,:].tolist() 
     
+            # plotting the scaled terminal set for the stabilizing controller
+            elp1_N = terminal_set_stabilizing_scaled[0,:].tolist()
+            elp2_N = terminal_set_stabilizing_scaled[1,:].tolist()
 
-    plt.close('all')
-    plt.ioff()
+            # plotting the terminal set for the safety filter
+            elp1_s = terminal_set_filter[0,:].tolist()
+            elp2_s = terminal_set_filter[1,:].tolist()
 
-    #slack_costs = stabilizing_controller.slack_costs
-    #perf_costs  = stabilizing_controller.perf_costs
-    #total_cost  = [perf_costs[i] + slack_costs[i] for i in range(len(slack_costs))]
+
+
+            # plotting planned trajectory
+            traj1 = [x0[0]]
+            traj2 = [x0[1]]
+
+            # plotting options
+            poly.plot(color = 'pink') 
+            dyn,  = plt.plot(x_hist1, x_hist2, '-o')
+            elp,  = plt.plot(elp1, elp2)
+            elp_N, = plt.plot(elp1_N, elp2_N)
+            elp_s, = plt.plot(elp1_s, elp2_s)
+            tra,  = plt.plot(traj1, traj2, '-o') 
+     
     
-    #data = buffer.get()
-    #policy.train(data['state'], data['act']) 
-    #torch.save(policy.state_dict(),  + "./policy_net" + ".pkl")
+            plt.title('System Dynamics')
+            plt.xlabel('x1 (position)')
+            plt.ylabel('x2 (velocity)') 
+    
+            plt.legend(['true trajectory',
+                        'controller terminal set', 
+                        'scaled terminal set', 
+                        'filter terminal set', 
+                        'planned trajectory',
+                        'state constraints'])
+            plt.ion()
+            plt.show()
 
-    #plt.title('MPC cost')
-    #plt.xlabel('x1 (position)')
-    #plt.ylabel('x2 (velocity)') 
-    #plt.plot(total_cost)
-    #plt.show()
+            for k in range(sim_steps):
+                try:
+                    slack_sol = stabilizing_controller.check_slack(x_current) 
+                except:
+                    break
+                u0, traj = stabilizing_controller.solve(x_current, slack_sol)
+                buffer.store(x_current, u0) 
+                terminal_set_stabilizing_scaled = ellipse_contoure(P, stabilizing_controller.terminalset_scaled(traj[-x_dim,:]))
+             
+                traj1 = traj[:,0].tolist()
+                traj2 = traj[:,1].tolist()
+            
+                elp1_N = terminal_set_stabilizing_scaled[0,:].tolist()
+                elp2_N = terminal_set_stabilizing_scaled[1,:].tolist()
+        
+                x_next =  simulate_dynamics(dynamics,x_current, u = u0, steps = 1, plot = False)
+
+                x_hist1.append(x_next[0,0])
+                x_hist2.append(x_next[1,0])
+                
+                elp1_s = terminal_set_filter[0,:].tolist()
+                elp2_s = terminal_set_filter[1,:].tolist()
+
+                tra.set_xdata(traj1)
+                tra.set_ydata(traj2)
+                dyn.set_xdata(x_hist1[:-1])
+                dyn.set_ydata(x_hist2[:-1])
+                elp.set_xdata(elp1)
+                elp.set_ydata(elp2)
+                elp_N.set_xdata(elp1_N)
+                elp_N.set_ydata(elp2_N)
+                elp_s.set_xdata(elp1_s)
+                elp_s.set_ydata(elp2_s)
+
+                plt.pause(0.01)
+                x_current = x_next
+            
+            plt.close('all')
+            plt.ioff()
+    
+    data = buffer.get()
+    states = data['state']
+    inputs = data['act']
+    torch.save(states, data_path + 'states.pt')
+    torch.save(inputs, data_path + 'inputs.pt')
+
+
 
 if __name__ == "__main__":
     main()

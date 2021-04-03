@@ -9,18 +9,17 @@ from numpy.linalg import eig
 from scipy.linalg import expm
 from scipy.linalg import solve_discrete_are
 
-from Utils import TerminalComponents
 from Utils import ReplayBuffer
 from StabilizingController import SMPC
 from SafetyFilter import MPSafetyFilter
 from LearningController import LearningController
-from ParametricPolicy import ParametricPolicy
 
 from casadi import *
 import matplotlib.pyplot as plt
 import polytope as pc
 import dill
 import ipdb
+
 def simulate_dynamics(dynamics, x0, u, steps = 10000, plot = True):
     '''
         Assumes a 2D state space
@@ -131,9 +130,10 @@ def main():
         visualize constraints and the ellipsoidal set
     '''
 
-    # defining the ellipse coordinates
+    # defining the ellipse contour for visualization
     terminal_set_stabilizing = ellipse_contoure(P, alpha_stabilizing)
     terminal_set_filter = ellipse_contoure(P, alpha_filter)
+    
     if (visualize_constraints):
 
         # defining the state  polytopic constraints
