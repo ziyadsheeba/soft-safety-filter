@@ -9,6 +9,7 @@ from scipy.linalg import expm
 from scipy.linalg import solve_discrete_are
 
 from Utils import TerminalComponents
+from Utils import ReplayBuffer
 from StabilizingController import SMPC
 from SafetyFilter import MPSafetyFilter
 from LearningController import LearningController
@@ -96,7 +97,7 @@ def main():
         Define options and flags
     '''
     visualize_constraints = True
-    sim_steps             = 100
+    sim_steps             = 200
     N                     = 40
     
     #constraints
@@ -238,6 +239,7 @@ def main():
                                              alpha_opt_filter, dynamics, N)
     learning_controller     = LearningController(x_dim, u_dim, u_max, u_min) 
     
+    buffer                  = ReplayBuffer(x_dim, u_dim, 1, 100)
     stabilizing_controller.setup()
     safety_filter.setup() 
     '''
@@ -307,13 +309,14 @@ def main():
         else:
             u0, traj = stabilizing_controller.solve(x_current, slack_sol)
             terminal_set_stabilizing_scaled = ellipse_contoure(P, stabilizing_controller.terminalset_scaled(traj[-x_dim,:]))
-            
+             
             traj1 = traj[:,0].tolist()
             traj2 = traj[:,1].tolist()
             
             elp1_N = terminal_set_stabilizing_scaled[0,:].tolist()
             elp2_N = terminal_set_stabilizing_scaled[1,:].tolist()
-    
+            buffer.store(x_current, u0)
+        
         x_next =  simulate_dynamics(dynamics,x_current, u = u0, steps = 1, plot = False)
 
         x_hist1.append(x_next[0,0])
@@ -337,6 +340,9 @@ def main():
 
         x_current = x_next
         
+        if (i+1)%100 == 0:
+            data = buffer.get()
+            ipdb.set_trace()
         if (i+1)%1000 == 0:
             print('singular disturbance applied')
             x_current = np.random.uniform(low = -2, high = 2, size = (x_dim,1)).reshape(x_dim,1)
@@ -348,7 +354,10 @@ def main():
     slack_costs = stabilizing_controller.slack_costs
     perf_costs  = stabilizing_controller.perf_costs
     total_cost  = [perf_costs[i] + slack_costs[i] for i in range(len(slack_costs))]
-    
+ 
+    plt.title('MPC cost')
+    plt.xlabel('x1 (position)')
+    plt.ylabel('x2 (velocity)') 
     plt.plot(total_cost)
     plt.show()
 

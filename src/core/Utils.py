@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from casadi import *
 from scipy.linalg import solve_discrete_are
 from scipy.linalg import solve_discrete_lyapunov
@@ -178,4 +179,44 @@ class TerminalComponents:
             suff_decrease = True
         else:
             suff_decrease = False
-        return suff_decrease 
+        return suff_decrease
+
+class ReplayBuffer:
+    '''
+        A buffer to store states and actions of the controller
+    '''
+    def __init__(self, state_dim, act_dim, num_agents, size):
+
+        self.state_buf      = list()
+        self.act_buf        = list()
+        self.ptr, self.max_size = 0, size
+        self.x_dim = state_dim
+        self.u_dim = act_dim
+    
+    def store(self, state, act):
+        
+        """
+        Append a single timestep to the buffer. This is called at each simulator step to
+        update to store the observed outcome.
+        """
+
+        # buffer has to have room so you can store
+        if self.ptr == self.max_size:
+            self.state_buf.pop(0)
+            self.act_buf.pop(0)
+            self.ptr -= 1
+
+        self.state_buf.append(state)
+        self.act_buf.append(act)
+        self.ptr += 1
+
+    def get(self):
+        """
+        Call when updating the agent networks
+        """
+        data = dict(state= np.concatenate(self.state_buf).reshape(len(self.state_buf, self.x_dim)), 
+                    act  = np.concatenate(self.act_buf).reshape(len(self.act_buf, self.u_dim)))
+
+        return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in data.items()}
+ 
+

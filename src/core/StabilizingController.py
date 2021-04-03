@@ -1,6 +1,6 @@
 '''
     Implements a linear soft-constrait MPC controller with stability guarantees.
-    Uses Casadi with Opti stack
+    Supports ellipsoidal termina sets only. Uses Casadi with Opti stack
 '''
 from sys import path
 path.append(r"./casadi-py27-v3.5.5")
@@ -18,9 +18,9 @@ class SMPC:
         '''
             x_dim       : state dimension
             u_dim       : input dimension 
-            Q           : states stage cost
-            R           : input stage cost
-            P           : terminal cost
+            Q           : states stage cost matrix
+            R           : input stage cost matrix
+            P           : terminal cost matrix
             S           : quadratic stage cost on slack
             gamma       : linear slack penalty weight
             G_x         : state constraint matrix
@@ -84,7 +84,7 @@ class SMPC:
         self.dynamics = dynamics
         
         # define the controller status
-        self.status = {'enabled': True, 'zero_slack': False, 'log_costs': True}
+        self.status = {'enabled': True, 'zero_slack': False, 'log_costs': True, 'learn_controller': False}
         
     def setup(self):
 
@@ -255,7 +255,7 @@ class SMPC:
 
     def solve(self, x0, slack_sol):
     
-        # warm start perf problem
+        # warm start performance problem
         self.opti_perf.set_initial(self.x_p, slack_sol.value(self.x))
         self.opti_perf.set_initial(self.u_p, slack_sol.value(self.u))
         
