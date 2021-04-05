@@ -162,8 +162,8 @@ def main():
 
     # create a grid of the state space
     resolution = 0.1 
-    x_max = 1
-    x_min = -1
+    x_max = 2
+    x_min = -2
     N = int((x_max-x_min)//resolution)
     x1 = np.linspace(x_min,x_max,N)
     x2 = np.linspace(x_min,x_max,N)
@@ -221,15 +221,16 @@ def main():
                         'filter terminal set', 
                         'planned trajectory',
                         'state constraints'])
-            plt.ion()
-            plt.show()
+            #plt.ion()
+            #plt.show()
 
             for k in range(sim_steps):
                 try:
                     slack_sol = stabilizing_controller.check_slack(x_current) 
+                    u0, traj = stabilizing_controller.solve(x_current, slack_sol)
+
                 except:
                     break
-                u0, traj = stabilizing_controller.solve(x_current, slack_sol)
                 buffer.store(x_current, u0) 
                 terminal_set_stabilizing_scaled = ellipse_contoure(P, stabilizing_controller.terminalset_scaled(traj[-x_dim,:]))
              
@@ -258,11 +259,11 @@ def main():
                 elp_s.set_xdata(elp1_s)
                 elp_s.set_ydata(elp2_s)
 
-                plt.pause(0.01)
+                #plt.pause(0.01)
                 x_current = x_next
             
-            plt.close('all')
-            plt.ioff()
+            #plt.close('all')
+            #plt.ioff()
     
     data = buffer.get()
     states = data['state']
