@@ -100,7 +100,7 @@ def main():
     sim_steps             = 50000
     
     #initial condition
-    x0                    = np.array([-1,1]).reshape(2,1)
+    x0                    = np.array([1.5,-2]).reshape(2,1)
     
  
     '''

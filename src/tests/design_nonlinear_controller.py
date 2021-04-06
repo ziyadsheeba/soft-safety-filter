@@ -127,7 +127,7 @@ def main():
     
     # system parameters
     k1                    = 1         # linear spring factor      
-    k2                    = 1         # cubic spring factor
+    k2                    = 0.1       # cubic spring factor
     c                     = 0.1       
     m                     = 0.5
     
