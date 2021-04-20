@@ -237,11 +237,11 @@ class SMPC:
         for i in range(self.f_x.shape[0]):
             
             c_squared[i] = self.G_x[i,:]@P_inv@self.G_x[i,:].T
-            self.opti_slack.subject_to(c_squared[i]*(x[-x_dim:].T@self.P@x[-x_dim:]) <= self.f_x[i]**2 + 
+            self.opti_slack.subject_to(c_squared[i]*(x[-x_dim:,:].T@self.P@x[-x_dim:,:]) <= self.f_x[i]**2 + 
                                                                                     eps_s[i]*eps_s[i] + 
                                                                                     2*self.f_x[i]*eps_s[i])
  
-            self.opti_perf.subject_to(c_squared[i]*(x_p[-x_dim:].T@self.P@x_p[-x_dim:]) <= self.f_x[i]**2 + 
+            self.opti_perf.subject_to(c_squared[i]*(x_p[-x_dim:,:].T@self.P@x_p[-x_dim:,:]) <= self.f_x[i]**2 + 
                                                                                        eps_s_p[i]*eps_s_p[i] + 
                                                                                        2*self.f_x[i]*eps_s_p[i]) 
         pass

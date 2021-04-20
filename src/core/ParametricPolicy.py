@@ -3,45 +3,70 @@ import torch.nn as nn
 import torch.functional as F
 import torch.optim as optimizer
 import numpy as np 
+import ipdb
+class MLP(nn.Module):
+    '''
+        A standard implementation of the neural network
+    '''
+    def __init__(self, input_dim, output_dim, hidden_size, layers = 2):
+        
+        super(MLP,self).__init__()
+
+        self.hidden_size  = hidden_size
+        input_layer  = nn.Linear(input_dim, hidden_size)
+        output_layer = nn.Linear(hidden_size, output_dim) 
+        self.layers = nn.ModuleList()
+        self.layers.append(input_layer)
+        for i in range(layers-2):
+            self.layers.append(nn.Linear(hidden_size, hidden_size))
+        self.layers.append(output_layer)
 
 class ParametricPolicy(nn.Module):
-    def __init__(self, x_dim, u_dim,layers = 2, hidden_size = 10, lr = 5e-4):
+    def __init__(self, x_dim, u_dim, u_min, u_max, layers, hidden_size = 30, lr = 5e-4):
         '''
             A neural network to learn a parametric policy that matches the 
             MPC behaviour.
         '''
         super(ParametricPolicy, self).__init__()
 
-        # network architecture
+        # network dimensions and scaling
         input_dim = x_dim
         output_dim = u_dim
-        self.layer_1 = nn.Linear(input_dim, hidden_size)
-        self.layer_2 = nn.Linear(hidden_size, output_dim)
-        self.layers  = [self.layer_1, self.layer_2]
+        self.u_max = u_max
+        self.u_min = u_min
+        self.net = MLP(input_dim, output_dim, hidden_size, 2) 
         
         # Optimizer
-        self.optimizer = optimizer.Adam(self.parameters(), lr)
+        self.optimizer = optimizer.Adam(self.net.parameters(), lr)
 
         # Weight initializations
         self.init_weights()
-
 
     def init_weights(self):
         '''
         Weights initialization method
         '''
-        for layer in self.layers:
+        for layer in self.net.layers:
             nn.init.xavier_uniform_(layer.weight)
 
     def forward(self, x):
-       '''
-       Forward propagation method
-       '''
-       x = nn.ReLU()(self.layer_1(x))
-       u = self.layer_2(x)
-       return u
+        
+        '''
+        Forward propagation method
+        '''
+        for i in range(len(self.net.layers)-1):
+            x = nn.ReLU()(self.net.layers[i](x))  
+        u = nn.Tanh()(self.net.layers[-1](x))
+        u = self.map2range(u)
+        return u
    
-    def train(self, states, actions, epochs= 100, batch_size = 256, split_ratio = 0.1):
+   
+    def map2range(self,u):
+
+        u = torch.mul(((u + 1)/2), (self.u_max - self.u_min)) + self.u_min
+        return u
+       
+    def train(self, states, actions, epochs= 300, batch_size = 256, split_ratio = 0.1):
 
     
         # Training - Validation split
@@ -76,15 +101,15 @@ class ParametricPolicy(nn.Module):
             val_action           = torch.Tensor(val_actions)
 
             with torch.no_grad():
-                out  = self.forward(val_states)
-                loss = nn.MSELoss()(out, val_actions)
-            print(f"Epoch: {epoch+1}/{epochs}, val_loss {loss}")
+                out  = self.forward(train_states)
+                loss = nn.L1Loss()(out, train_actions)
+            print(f"Epoch: {epoch+1}/{epochs}, train_loss {loss}")
     
     def update(self, states_batch, actions_batch):
 
         out  = self.forward(states_batch)
         
-        loss = nn.MSELoss()(out, actions_batch)
+        loss = nn.L1Loss()(out, actions_batch)
         loss.backward()
         self.optimizer.step()
         self.optimizer.zero_grad()

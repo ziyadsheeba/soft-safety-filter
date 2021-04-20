@@ -76,13 +76,14 @@ def load_model(filename):
         return dill.load(input)
     return 0
 def main():
+    mode = 'nonlinear' 
     
     ''' 
         Files and directories
     '''
     models_path = '../models/controllers/'
-    stabilizing_controller_path = models_path + 'stabilizing_controller_nonlinear.pkl' 
-    safety_filter_path = models_path + 'safety_filter_nonlinear.pkl' 
+    stabilizing_controller_path = models_path + 'stabilizing_controller_'+mode+'.pkl' 
+    safety_filter_path = models_path + 'safety_filter_'+ mode +'.pkl' 
     learning_controller_path = models_path + 'learning_controller.pkl' 
     
     '''
@@ -193,16 +194,16 @@ def main():
     tra,  = plt.plot(traj1, traj2, '-o') 
      
     
-    plt.title('System Dynamics')
-    plt.xlabel('x1 (position)')
-    plt.ylabel('x2 (velocity)') 
+    plt.title('System Dynamics', size = 15)
+    plt.xlabel('x1 (position)', size= 15)
+    plt.ylabel('x2 (velocity)', size= 15)
     
     plt.legend(['true trajectory',
                 'controller terminal set', 
                 'scaled terminal set', 
                 'filter terminal set', 
                 'planned trajectory',
-                'state constraints'])
+                'state constraints'], prop={'size': 15})
     plt.ion()
     plt.show()
 
@@ -220,7 +221,7 @@ def main():
 
         else:
             u0, traj = stabilizing_controller.solve(x_current, slack_sol)
-            terminal_set_stabilizing_scaled = ellipse_contoure(P, stabilizing_controller.terminalset_scaled(traj[-x_dim,:]))
+            terminal_set_stabilizing_scaled = ellipse_contoure(P, stabilizing_controller.terminalset_scaled(traj[-1,:]))
              
             traj1 = traj[:,0].tolist()
             traj2 = traj[:,1].tolist()
@@ -250,7 +251,6 @@ def main():
         plt.pause(0.01)
 
         x_current = x_next
-                
         if (i+1)%60== 0:
             print('singular disturbance applied')
             x_current = np.random.uniform(low = -1.2, high = 1.2, size = (x_dim,1)).reshape(x_dim,1)

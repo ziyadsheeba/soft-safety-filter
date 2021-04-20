@@ -136,8 +136,13 @@ class TerminalComponents:
         for i in range(restarts):
             initial = np.random.normal(loc = 0, scale = 10, size = (self.x_dim,1)).reshape(self.x_dim,1)  
             opti.set_initial(x, initial)
-            sol = opti.solve()
-            vals.append(sol.value(f))
+            try:
+                sol = opti.solve()
+                vals.append(sol.value(f))
+            except:
+                pass
+        if len(vals) == 0:
+            raise Exception("invariance optimization failed for all trials")
         
         val = max(vals)  
         if val>= alpha_opt:
@@ -166,9 +171,15 @@ class TerminalComponents:
         for i in range(restarts):
             initial = np.random.normal(loc = 0, scale = 10, size = (self.x_dim,1)).reshape(self.x_dim,1)  
             opti.set_initial(x, initial)
-            sol = opti.solve()
-            vals.append(sol.value(f))
+            try:
+                sol = opti.solve()
+                vals.append(sol.value(f))
+            except:
+                pass
         
+        if len(vals) == 0:
+            raise Exception('sufficient decrease optimization problem failed in all restarts')
+
         val = max(vals) 
         if (val <= 1e-7):
             suff_decrease = True
@@ -180,35 +191,19 @@ class ReplayBuffer:
     '''
         A buffer to store states and actions of the controller
     '''
-    def __init__(self, state_dim, act_dim, num_agents, size):
+    def __init__(self, state_dim, act_dim):
 
         self.state_buf      = list()
         self.act_buf        = list()
-        self.ptr, self.max_size = 0, size
         self.x_dim = state_dim
         self.u_dim = act_dim
     
     def store(self, state, act):
         
-        """
-        Append a single timestep to the buffer. This is called at each simulator step to
-        update to store the observed outcome.
-        """
-
-        # buffer has to have room so you can store
-        if self.ptr == self.max_size:
-            self.state_buf.pop(0)
-            self.act_buf.pop(0)
-            self.ptr -= 1
-
         self.state_buf.append(state)
         self.act_buf.append(act)
-        self.ptr += 1
 
     def get(self):
-        """
-        Call when updating the agent networks
-        """
         data = dict(state= np.concatenate(self.state_buf).reshape(len(self.state_buf), self.x_dim), 
                     act  = np.concatenate(self.act_buf).reshape(len(self.act_buf), self.u_dim))
 
