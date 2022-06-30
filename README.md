@@ -1,2 +1,2 @@
 # soft-safety-filter
-An implementation of a soft constrained nonlinear model predictive safety filter with stability guarantees.
+An implementation of a soft constrained nonlinear model predictive safety filter with stability guarantees. The soft constrained safety filter can be added as a filtering layer on top of any learning based controller and is guaranteed to keep the agent in a safe state. In case of a singular disturbance that drives the agent out of a the safe set, the soft safetly filter is guaranteed to return the agent to a safe state and recover from the unsafe situation.
